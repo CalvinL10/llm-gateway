@@ -1,0 +1,27 @@
+{
+  "result": "AGENT_GATEWAY_PASS",
+  "simpleCalls": 1,
+  "adaptiveCalls": 7,
+  "adaptiveChildCalls": 3,
+  "crossProviderChildren": true,
+  "parallelChildren": true,
+  "resultDrivenFollowup": true,
+  "callLimit": 8,
+  "cancelledChildren": true,
+  "modelDirectedRecovery": true,
+  "transport": "in-process scripted adapter",
+  "restartNoReplay": true,
+  "authentication": 401,
+  "origin": 403,
+  "host": 403,
+  "attachments": 400,
+  "realModelCalls": 0,
+  "tasks": {
+    "simple": "a62fff8f-7aab-44f9-9b95-3ad2c0e2a0dc",
+    "adaptive": "1c6d5ea1-ec6a-4dd8-97d4-45ee4cfeed75",
+    "recovered": "3ebccd47-d6c4-49fb-919e-0c0c7afd2164",
+    "limited": "1f8a7ebd-8ed0-41af-a569-9c6a6ba521a5",
+    "cancelled": "b49faeea-4dae-4895-831f-ab529b600345",
+    "unknown": "1cbfb533-8966-48d0-844c-35a3e464de27"
+  }
+}

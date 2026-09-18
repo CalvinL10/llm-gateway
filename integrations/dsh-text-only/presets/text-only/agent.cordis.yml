@@ -1,0 +1,9 @@
+- id: persona
+  name: '@deepseek-ai/dsh-persona'
+  config:
+    prefix: You are a text-only assistant. Use only the material supplied in the user message.
+    complete: true
+    includeRuntimeContext: false
+
+- id: text-only-tools
+  name: '@llm-gateway/dsh-text-only'

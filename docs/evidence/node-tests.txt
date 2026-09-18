@@ -1,0 +1,77 @@
+✔ invalid development preset fails at create without a model call or raw error disclosure
+▶ development preset on the native host (zero real models)
+  ✔ authentication, Origin/Host, and input protections still apply
+  ✔ native development mount advertises only the authorized root tools
+  ✔ native file operations, workspace fence, observation policy and child read-only delegation
+  ✔ native pwsh and re-read then edit retain workspace-write confinement
+  ✔ cross-workspace write approval chain: unapproved, rejected, and single-use semantics
+  ✔ budget terminal reports use native results, not intermediate assistant claims
+  ✔ command nonzero is failed even when tool transport and model finish normally
+✔ development preset on the native host (zero real models)
+✔ ensureGrantableWorkspace verifies and establishes Windows ACL standing grant idempotently
+✔ only the default isolated Node test worker is matched
+✔ executor preserves policy, argv, environment and abort signal
+✔ development deployment selects the confined executor through real loader semantics
+﹣ same-workspace native ACL before/after regression (zero model) # SKIP
+✔ concurrent descendants share one durable admission limit; failed calls are not refunded
+✔ effective dispatch route is checked even when a child inherits or omits model selection
+✔ cancel closes admissions; restart marks active work unknown without recreating it
+✔ same request ID is idempotent, conflicting input fails; task policy is detached
+✔ failed persistence cannot issue an admission receipt
+✔ explicit child routes and reasoning are enforced at dispatch without changing legacy policies
+✔ host lineage includes grandchildren and isolates unrelated tasks; cycles fail closed
+✔ development tool set is root-write and child-read-only by construction
+✔ dynamic tool guard does not disable sandbox/approval checks
+✔ development scope narrows child sandbox and capabilities without changing root approval
+✔ execution stage is safe and durable: create
+✔ execution stage is safe and durable: resolve-agent
+✔ execution stage is safe and durable: check-safety
+✔ execution stage is safe and durable: check-tools
+✔ execution stage is safe and durable: rename
+✔ execution stage is safe and durable: select-model
+✔ execution stage is safe and durable: prompt
+✔ execution stage is safe and durable: wait-idle
+✔ execution stage is safe and durable: evidence
+✔ execution stage is safe and durable: success
+✔ budget without effects, with edit and unfinished check, or tool failure never means completed
+✔ normal completion at exactly eight calls is not a limit stop or business acceptance
+✔ cancel and restart unknown take precedence over budget denial; evidence and idempotency survive
+✔ safe projections use linked result facts only; no arbitrary error, arguments, meta or content escapes
+✔ only final text of completed turn is an artifact; legacy partial records remain visibly unverified
+✔ read-only panel labels limited/completed correctly and never renders assistant claims or posts
+✔ Sol 401 produces one request without refresh resend or model substitution
+✔ Sol 404 produces one request without refresh resend or model substitution
+✔ Sol 429 produces one request without refresh resend or model substitution
+✔ Sol 500 produces one request without refresh resend or model substitution
+✔ Gemini 404 produces one request without endpoint retry or version substitution
+✔ Gemini 429 produces one request without endpoint retry or version substitution
+✔ Gemini 500 produces one request without endpoint retry or version substitution
+✔ Gemini network produces one request without endpoint retry or version substitution
+✔ effective web profile disables model titles and retains local service
+title evidence: {"mainStubCalls":2,"auxiliaryCalls":0,"title":"TASK02 local deterministic title example"}
+✔ real title service: first prompt, later prompt, refresh, rename, reread have no auxiliary call
+cancel evidence: {"cooperative":true,"keepInbox":false,"pending":0,"calls":1,"signalAborted":true,"cleaned":true,"idle":true,"end":"aborted","retainedPrefix":true}
+✔ DSH cancellation: cooperative local stream, keepInbox=false
+cancel evidence: {"cooperative":false,"keepInbox":false,"pending":0,"calls":1,"signalAborted":true,"cleaned":true,"idle":true,"end":"aborted","retainedPrefix":true}
+✔ DSH cancellation: delayed non-cooperative local stream, keepInbox=false
+cancel evidence: {"cooperative":false,"keepInbox":true,"pending":1,"calls":1,"signalAborted":true,"cleaned":true,"idle":true,"end":"aborted","retainedPrefix":true}
+✔ DSH cancellation: delayed non-cooperative local stream, keepInbox=true
+positive control: {"mainStubCalls":1,"auxiliaryStubCalls":1,"realCalls":0}
+✔ positive control: enabled upstream title plugin is detected as a separate local call
+✔ input keeps exact whitespace/material order; attachments and implicit route rejected
+✔ actual DSH loops + host JSON storage: separate sessions, full review context, durable decision, read never calls
+✔ draft is durable and queryable during review; review failure retains draft
+✔ production runner refuses unsafe permission/tools before prompt; exact selections enforced
+✔ unknown prior active work is query-only after reopening; no replay
+✔ concurrent UUID admission survives storage reopen; mismatched payload is rejected without execution
+✔ pre-admission cancellation and cancellation during async admission cannot leave queued work
+✔ cancel between stages blocks review; storage failure after draft blocks review too
+✔ unknown result has no retry; failed retry preserves original route and refuses changed configuration
+✔ graceful shutdown cancels running work, keeps draft, and never starts a new stage
+ℹ tests 64
+ℹ suites 0
+ℹ pass 63
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 1
+ℹ todo 0

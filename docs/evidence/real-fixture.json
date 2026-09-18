@@ -1,0 +1,46 @@
+{
+  "evidenceType": "sanitized projection of an existing local acceptance, not a new execution",
+  "requestId": "3605c36f-122f-46d2-8307-83e139a47f63",
+  "createdAtUTC": "2026-09-18T06:08:40.470Z",
+  "endedAtUTC": "2026-09-18T06:09:37.448Z",
+  "sourceRevision": "2757215821cb",
+  "fixture": "clamp(value, min, max): inclusive upper boundary",
+  "before": "return Math.min(Math.max(value, min), max - 1);",
+  "after": "return Math.min(Math.max(value, min), max);",
+  "assertion": "assert.equal(clamp(10, 0, 10), 10)",
+  "testFileUnchanged": true,
+  "command": "node --test .\\range.test.js",
+  "editEvents": [
+    29,
+    30
+  ],
+  "commandEvents": [
+    34,
+    35
+  ],
+  "taskStatus": "completed",
+  "rootCalls": 5,
+  "childCalls": 0,
+  "approvalRequests": 0,
+  "commandExitCode": 0,
+  "testResult": {
+    "pass": 1,
+    "fail": 0
+  },
+  "businessOutcome": "unverified",
+  "validation": "not-established",
+  "independentReadOnlyReview": {
+    "rawFramesRead": 19,
+    "rawEvents": 42,
+    "observedEvents": 42,
+    "requestId": "3605c36f-122f-46d2-8307-83e139a47f63",
+    "status": "completed",
+    "calls": 5,
+    "approvalRequests": 0,
+    "command": "node --test .\\range.test.js",
+    "testFileUnchanged": true,
+    "matchedRawSession": true,
+    "matchedRawLedger": true
+  },
+  "publicationBoundary": "Raw authenticated sessions and the full task ledger remain private. This projection is not an independently hosted third-party attestation."
+}

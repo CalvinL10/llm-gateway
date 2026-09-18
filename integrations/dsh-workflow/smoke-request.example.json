@@ -1,0 +1,18 @@
+{
+  "question": "下面的 average 函数遇到空列表会出错。请提出最小修复方案：空列表返回 None，非空数值列表保持原行为。",
+  "materials": [
+    "def average(values):\n    return sum(values) / len(values)\n",
+    "示例：average([]) 应返回 None；average([2, 4]) 应返回 3。"
+  ],
+  "constraints": "仅根据提供的文本分析，不读取文件、不调用工具、不执行代码。方案或审阅控制在 200 字以内（代码除外）。",
+  "generation": {
+    "connectionId": "chatgpt-existing",
+    "model": "gpt-5.6-sol",
+    "reasoningEffort": "medium"
+  },
+  "review": {
+    "connectionId": "google-existing",
+    "model": "gemini-3.8-flash",
+    "reasoningEffort": "high"
+  }
+}

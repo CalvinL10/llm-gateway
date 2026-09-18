@@ -1,0 +1,27 @@
+{
+  "result": "AGENT_GATEWAY_PASS",
+  "simpleCalls": 1,
+  "adaptiveCalls": 7,
+  "adaptiveChildCalls": 3,
+  "crossProviderChildren": true,
+  "parallelChildren": true,
+  "resultDrivenFollowup": true,
+  "callLimit": 8,
+  "cancelledChildren": true,
+  "modelDirectedRecovery": true,
+  "transport": "pi-ai + loopback HTTP SSE",
+  "restartNoReplay": true,
+  "authentication": 401,
+  "origin": 403,
+  "host": 403,
+  "attachments": 400,
+  "realModelCalls": 0,
+  "tasks": {
+    "simple": "4df0236c-08f1-4779-997f-8cdd5fbedbf8",
+    "adaptive": "d9d9d4d3-99b0-44e5-b695-0004c3381129",
+    "recovered": "6736c8b9-b252-4c2e-b266-4ce3c6f941ce",
+    "limited": "dcf5a788-b97f-4923-9893-f68394d8fc4c",
+    "cancelled": "b411c57d-11b0-4a42-846e-74f0264ca5d2",
+    "unknown": "138248d5-8e5f-4262-9175-52e300ea27b4"
+  }
+}

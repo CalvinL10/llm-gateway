@@ -49,3 +49,8 @@ htmlcov/
 # OS specific
 .DS_Store
 Thumbs.db
+
+# Isolated DSH runtime, credentials, sessions and local package store
+.local/
+.pnpm-store/
+**/__pycache__/

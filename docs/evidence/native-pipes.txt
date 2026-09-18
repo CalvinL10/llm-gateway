@@ -1,0 +1,18 @@
+✔ only the default isolated Node test worker is matched
+✔ executor preserves policy, argv, environment and abort signal
+✔ development deployment selects the confined executor through real loader semantics
+▶ same-workspace native ACL before/after regression (zero model)
+  ✔ unpatched original command still reproduces EPERM
+  ✔ patched original command passes without disabling isolation
+  ✔ isolated worker keeps denied writes and complete stdout/stderr
+  ✔ real assertion failure remains a nonzero command result
+  ✔ multiple isolated workers drain output without pipe deadlock
+  ✔ worker timeout remains a failure and closes inherited pipes
+✔ same-workspace native ACL before/after regression (zero model)
+ℹ tests 10
+ℹ suites 0
+ℹ pass 10
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0

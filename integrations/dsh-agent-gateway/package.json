@@ -1,0 +1,9 @@
+{
+  "name": "@llm-gateway/dsh-agent-gateway",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "index.js",
+  "exports": {".": "./index.js", "./tools": "./tools.js"},
+  "peerDependencies": {"zod": "^4.0.0", "@deepseek-ai/dsh-llm": "^0.1.5-rc.2"}
+}

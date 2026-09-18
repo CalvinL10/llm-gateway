@@ -1,0 +1,23 @@
+✔ concurrent descendants share one durable admission limit; failed calls are not refunded
+✔ effective dispatch route is checked even when a child inherits or omits model selection
+✔ cancel closes admissions; restart marks active work unknown without recreating it
+✔ same request ID is idempotent, conflicting input fails; task policy is detached
+✔ failed persistence cannot issue an admission receipt
+✔ explicit child routes and reasoning are enforced at dispatch without changing legacy policies
+✔ host lineage includes grandchildren and isolates unrelated tasks; cycles fail closed
+✔ development tool set is root-write and child-read-only by construction
+✔ dynamic tool guard does not disable sandbox/approval checks
+✔ development scope narrows child sandbox and capabilities without changing root approval
+✔ budget without effects, with edit and unfinished check, or tool failure never means completed
+✔ normal completion at exactly eight calls is not a limit stop or business acceptance
+✔ cancel and restart unknown take precedence over budget denial; evidence and idempotency survive
+✔ safe projections use linked result facts only; no arbitrary error, arguments, meta or content escapes
+✔ only final text of completed turn is an artifact; legacy partial records remain visibly unverified
+✔ read-only panel labels limited/completed correctly and never renders assistant claims or posts
+ℹ tests 16
+ℹ suites 0
+ℹ pass 16
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0

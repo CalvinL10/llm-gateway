@@ -1,0 +1,8 @@
+{
+  "name": "@llm-gateway/dsh-workflow",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "index.js",
+  "peerDependencies": {"zod": "^4.0.0"}
+}
