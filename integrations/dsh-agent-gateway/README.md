@@ -1,6 +1,8 @@
 # llm-gateway 插件：最短使用说明
 
-[English](README.en.md) · [下载 v0.2.0](https://github.com/CalvinL10/llm-gateway/releases/tag/v0.2.0)
+**中文** | [English](README.en.md)
+
+[下载 v0.2.0](https://github.com/CalvinL10/llm-gateway/releases/tag/v0.2.0)
 
 同一安装包接入不同 DSH Web Home，使用各宿主自己的 Provider、账号、工作区和存储。
 不安装另一套 DSH，不复制 OAuth/订阅目录，不自动启动任务。新入口 `./plugin` 与普通会话共存；

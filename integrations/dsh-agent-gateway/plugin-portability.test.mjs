@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {randomUUID} from 'node:crypto';
-import {mkdir, readFile, writeFile, copyFile, symlink, realpath} from 'node:fs/promises';
+import {access, mkdir, readFile, writeFile, copyFile, symlink, realpath} from 'node:fs/promises';
 import {spawn, execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import {once} from 'node:events';
@@ -20,6 +20,25 @@ const route = {provider:'fixture-lead', model:'planner'};
 const children = [{provider:'fixture-deep',model:'flash-a'}, {provider:'fixture-google',model:'flash-b'}];
 const selection = mode => ({root:route, mode, children:mode === 'single' ? [] : children});
 const redact = text => String(text).replace(/([?&]token=)[^\s&]+/g, '$1[redacted]');
+
+test('documentation language navigation resolves paired pages and local links', async () => {
+  const root = resolve(source, '../..');
+  for (const [zh, en] of [
+    ['README.md', 'README.en.md'],
+    ['integrations/dsh-agent-gateway/README.md', 'integrations/dsh-agent-gateway/README.en.md'],
+    ['docs/releases/v0.2.0.md', 'docs/releases/v0.2.0.en.md'],
+  ]) {
+    for (const [file, other, label] of [[zh, en, 'English'], [en, zh, '中文']]) {
+      const text = await readFile(resolve(root, file), 'utf8');
+      const destination = relative(dirname(resolve(root, file)), resolve(root, other)).replaceAll('\\', '/');
+      assert.ok(text.split(/\r?\n/).slice(0, 5).join('\n').includes('[' + label + '](' + destination + ')'), file);
+      for (const match of text.matchAll(/\[[^\]]+\]\(([^)]+)\)/g)) {
+        if (/^(?:https?:|#)/.test(match[1])) continue;
+        await access(resolve(root, dirname(file), match[1].split('#')[0]));
+      }
+    }
+  }
+});
 
 test('coexistence requires complete host-owned identity, not prompt or caller claims', () => {
   const gateway = new Set(['llm-gateway-single']);

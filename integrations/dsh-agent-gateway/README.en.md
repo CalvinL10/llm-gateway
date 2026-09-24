@@ -1,6 +1,8 @@
 # llm-gateway plugin: installation and usage
 
-[中文](README.md) · [Download v0.2.0](https://github.com/CalvinL10/llm-gateway/releases/tag/v0.2.0)
+[中文](README.md) | **English**
+
+[Download v0.2.0](https://github.com/CalvinL10/llm-gateway/releases/tag/v0.2.0)
 
 Install the same package into separate compatible DSH Web Homes. Each instance uses its own host providers, credentials, authorized workspaces, and storage. No account copying, automatic task execution, or second DSH installation is required.
 
@@ -18,7 +20,7 @@ Download `llm-gateway-dsh-agent-gateway-0.2.0.tgz` from the release above, **not
 
 ```powershell
 $env:DSH_HOME = 'F:\my-dsh-home'  # Current terminal only; choose a different Home for another instance
- dsh plugin --profile web add F:\packages\llm-gateway-dsh-agent-gateway-0.2.0.tgz --config.auto-install-peers=false
+dsh plugin --profile web add F:\packages\llm-gateway-dsh-agent-gateway-0.2.0.tgz --config.auto-install-peers=false
 ```
 
 The bundle adds a **disabled** `gateway-agent-tasks` entry. Installation does not select accounts, authorize directories, or call a model. Dependencies come from the existing host; investigate missing peer dependencies rather than installing another runtime automatically.
