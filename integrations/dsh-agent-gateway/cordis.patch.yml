@@ -1,0 +1,6 @@
+# Installation neither selects an account nor authorizes a workspace.
+- insert:
+    - id: gateway-agent-tasks
+      name: '@llm-gateway/dsh-agent-gateway/plugin'
+      disabled: true
+      config: {}

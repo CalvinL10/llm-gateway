@@ -1,0 +1,3 @@
+name: Gateway · 文本委派
+description: 由任务页启动；共享限额、原生子任务，不开放文件或命令。
+order: 110

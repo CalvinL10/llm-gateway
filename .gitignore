@@ -54,3 +54,7 @@ Thumbs.db
 .local/
 .pnpm-store/
 **/__pycache__/
+
+# Host dependencies are not release source
+**/node_modules/
+integrations/dsh-agent-gateway/runtime/

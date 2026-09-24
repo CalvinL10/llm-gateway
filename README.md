@@ -1,50 +1,26 @@
-# Agent Execution Gateway
+# llm-gateway
 
-A local backend for **bounded, traceable LLM-agent execution**. A root agent can answer directly or delegate through DSH's native runtime; this project adds task admission, persistent execution records, and evidence-based reporting.
+**DSH Web task plugin / DSH Web 任务插件**
 
-The engineering problem: a returned model response is not proof that a task succeeded. Parallel descendants, interrupted processes, and failed tools need explicit outcomes.
+Reuse the host's models, credentials, workspaces, tools and approvals. The plugin provides task pages, root/child model selection, delegation, shared call limits, cancellation and explicit continuation without restricting ordinary host sessions.
 
-## Project contributions
+复用宿主模型、账号、工作区、工具与审批，提供任务页面、根/子模型选择、委派、共享限额、取消和显式继续；普通宿主会话不受网关误拦截。
 
-- **Task control:** UUID-based duplicate submission handling, dispatch-time route checks, and a shared call limit across the root and descendants. Admission persists before a call proceeds.
-- **Failure behavior:** failed calls are not refunded; cancellation closes further admissions; interrupted tasks become `unknown` after restart instead of being automatically replayed.
-- **Execution evidence:** a read-only report separates turn completion from business acceptance and links file operations and command results to recorded tool events.
-- **Confined development tools:** root file/terminal operations and read-only child tools, retaining native authentication, approvals, and sandbox enforcement.
-- **Targeted Windows repair:** inherited anonymous pipes address a reproduced restricted-token `spawn EPERM` failure in isolated Node test workers, without disabling test isolation or using unrestricted execution.
+## Install / 安装
 
-DSH supplies the agent loop, model catalog, delegation, tools, sessions, authentication, and storage. These are upstream capabilities, not a self-built engine. See [attribution](THIRD_PARTY_NOTICES.md).
+- **[中文安装教程](integrations/dsh-agent-gateway/README.md)**
+- **[English installation guide](integrations/dsh-agent-gateway/README.en.md)**
+- **[Download v0.2.0 / 下载插件包](https://github.com/CalvinL10/llm-gateway/releases/tag/v0.2.0)**
 
-## Portable demo
+Use the release's `.tgz` asset with native `dsh plugin --profile web add/remove`. Installation is disabled by default until you configure authorized workspaces and policy. No repository clone, copied Home, or historical launcher is needed.
 
-Verified with Node.js **v24.15.0**. This demo needs no credentials, package installation, or private runtime:
+下载 Release 中的 `.tgz`，通过 DSH 原生插件命令安装；首次默认未启用，配置授权工作区和策略后再启用。无需复制整个工作台或历史 Home。
 
-```powershell
-git clone https://github.com/CalvinL10/llm-gateway.git
-cd llm-gateway
-node --test integrations/dsh-agent-gateway/offline.test.mjs integrations/dsh-agent-gateway/report.test.mjs
-```
+## Scope / 支持范围
 
-This exercises admission, duplicate requests, cancellation/restart semantics, tool boundaries, and report projection. It is an automated local demo, not a live-model run.
+- Windows, loopback, compatible DSH Web. Tested against a **locally modified** CLI 0.1.5-rc.1 / service 0.1.5-rc.2 runtime; unmodified upstream installations are not certified. 当前只验收该本机兼容组合，不承诺任意发行版。
+- Commands require an explicitly configured supported isolated executor; there is no unisolated host-shell fallback. 命令执行需要显式配置隔离执行器。
+- Interrupted tasks become `unknown`; restart never replays them automatically. 重启不自动重放任务。
+- Two-Home installation/removal and task control were checked with local scripted responses, not real model calls or Docker development commands. 不把接入验证当作真实业务验收。
 
-## Verification scope
-
-| Evidence level | Verified scope |
-| --- | --- |
-| Implemented and locally tested | Task API, admission ledger, tool restrictions, safe report projection, Windows worker-pipe repair |
-| Real host, simulated models | DSH + loopback HTTP/SSE: parallel delegation, follow-up, child-error recovery, cancellation, restart without replay |
-| Recorded real-model execution | A bounded coding fixture: the agent edited a boundary defect and ran the unchanged test with default process isolation |
-
-The real fixture does not establish general autonomous development or production reliability. This is a **single-process, local project**, not a production incident-response or high-availability platform. The call limit is not a token/dollar cap; local cancellation does not prove remote billing stopped.
-
-- [Demo steps and expected results](docs/demo.md)
-- [Sanitized verification records](docs/verification.md)
-- [Runtime and operating boundaries](docs/runbook.md)
-- [API and implementation map](integrations/dsh-agent-gateway/README.md)
-
-## Repository layout
-
-- `integrations/dsh-agent-gateway/`: current task gateway and regressions.
-- `integrations/dsh-workflow/`, `dsh-task02/`, `dsh-text-only/`: earlier integration experiments retained for reference and regression testing.
-- `app/`, `tests/`, Python/Docker configuration: a separate FastAPI/MockProvider/Redis cache experiment, **not connected** to the agent gateway. Docker does not start this gateway.
-
-Runtime packages, credentials, private sessions, debugging records, and personal application materials are excluded. No throughput, cost-saving, user-scale, or availability claims are made.
+[Third-party notices / 第三方归属](THIRD_PARTY_NOTICES.md). Older repository materials are historical context, not the installation entry point for this release.

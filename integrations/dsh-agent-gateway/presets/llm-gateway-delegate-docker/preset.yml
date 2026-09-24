@@ -1,0 +1,3 @@
+name: Gateway · 开发与只读委派
+description: 由任务页启动；根读写需审批，子任务只读，模型范围与限额跟随任务。
+order: 112

@@ -1,9 +1,44 @@
 {
   "name": "@llm-gateway/dsh-agent-gateway",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "main": "index.js",
-  "exports": {".": "./index.js", "./tools": "./tools.js"},
-  "peerDependencies": {"zod": "^4.0.0", "@deepseek-ai/dsh-llm": "^0.1.5-rc.2"}
+  "exports": {
+    ".": "./index.js",
+    "./plugin": "./plugin.js",
+    "./tools": "./tools.js",
+    "./docker-executor": "./docker-pwsh-executor.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "plugin.js",
+    "ledger.js",
+    "report.js",
+    "panel.js",
+    "tools.js",
+    "cordis.patch.yml",
+    "presets/",
+    "docker-pwsh-executor.js",
+    "docker-executor-spec.mjs",
+    "README.md",
+    "README.en.md"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "peerDependencies": {
+    "zod": "^4.0.0",
+    "@deepseek-ai/dsh-llm": "^0.1.5-rc.2",
+    "@deepseek-ai/dsh-pwsh-sandbox": "^0.1.5-rc.2"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/dsh-pwsh-sandbox": {
+      "optional": true
+    }
+  }
 }
