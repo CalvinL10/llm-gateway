@@ -28,5 +28,11 @@ const shared = {bundle:true, format:'esm', packages:'external', logLevel:'info',
 await mkdir(resolve(root, 'lib'), {recursive:true});
 await build({...shared, platform:'node', target:'node22', entryPoints:[resolve(root,'src/index.ts')], outfile:resolve(root,'lib/index.js')});
 await build({...shared, platform:'node', target:'node22', entryPoints:[resolve(root,'src/defaults.js')], outfile:resolve(root,'lib/defaults.js')});
-await build({...shared, platform:'browser', target:'es2022', jsx:'automatic', entryPoints:[resolve(root,'src/client.tsx')], outfile:resolve(root,'lib/client.js')});
+// DSH client plugins are classic scripts registered with its module loader.
+await build({...shared, format:'cjs', platform:'browser', target:'es2022', jsx:'automatic',
+  banner:{js:'window.__ModuleLoader__.load({id:"@llm-gateway/dsh-subscriptions",factory:(require)=>{var module={exports:{}};var exports=module.exports;'},
+  footer:{js:'return module.exports;}});'},
+  entryPoints:[resolve(root,'src/client.tsx')], outfile:resolve(root,'lib/client.js')});
 await copyFile(resolve(source, 'LICENSE'), resolve(root, 'UPSTREAM_LICENSE'));
+await build({...shared, platform:'node', target:'node22', entryPoints:[resolve(root,'test/upstream.ts')],
+  outfile:resolve(root,'../../.local/subscription-test-adapters.mjs')});

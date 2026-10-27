@@ -2,29 +2,32 @@
 
 [中文](README.md) | **English**
 
-A task plugin for compatible DSH Web hosts. Reuse the host's models, credentials, workspaces, tools and approvals. Manage tasks, root/child model selection, delegation, shared call limits, cancellation and explicit continuation without restricting ordinary host sessions.
+Subscription account connections and independent main/child model settings for **DSH 0.2.1-rc.3**. Use ordinary new conversations alongside native DeepSeek and custom API providers.
 
 ## Installation
 
-- **[Installation and usage guide](integrations/dsh-agent-gateway/README.en.md)**
-- **[Download the v0.2.0 plugin](https://github.com/CalvinL10/llm-gateway/releases/tag/v0.2.0)**
-- [v0.2.0 release notes](docs/releases/v0.2.0.en.md)
+- **[Installation and usage guide](integrations/dsh-subscriptions/README.en.md)**
+- **[Download v0.3.0-rc.1 candidate](https://github.com/CalvinL10/llm-gateway/releases/tag/v0.3.0-rc.1)**
+- [Release notes and verification scope](docs/releases/v0.3.0-rc.1.en.md)
 
-Download `llm-gateway-dsh-agent-gateway-0.2.0.tgz` and use native DSH `plugin --profile web add/remove` commands. Installation is disabled by default until authorized workspaces and policy are configured. It does not select accounts or start tasks automatically.
+Paste the release asset URL for `llm-gateway-dsh-subscriptions-0.3.0-rc.1.tgz` into DSH's Add Plugin input. Restart when prompted, open Settings → 订阅连接与模型设置, connect your Codex / ChatGPT, Antigravity or Claude account, save model choices and create an ordinary conversation. Installing does not sign in or change model defaults.
 
 No repository clone, copied workbench, historical Home or legacy launcher is required.
 
 ## Source and installable package
 
-The runtime source is in [integrations/dsh-agent-gateway](integrations/dsh-agent-gateway). The `v0.2.0` tag preserves the release source; `main` includes subsequent documentation updates.
+The new source is in [integrations/dsh-subscriptions](integrations/dsh-subscriptions). Set a default child model and permit per-delegation choices across subscription, DeepSeek and other API providers. Independent child routing uses native spawn subagents; fork and external-product subagents retain their host settings.
 
-GitHub's automatically generated Source code archives are source snapshots, not installable plugin packages. Install the release's `.tgz` asset instead. This documentation language-switch update does not change runtime code or replace the published package.
+GitHub's automatically generated Source code archives are source snapshots, not installable plugin packages. Install the release's `.tgz` asset instead.
 
 ## Supported scope
 
-- Acceptance covers Windows, loopback and compatible DSH Web. The tested CLI **0.1.5-rc.1** / service **0.1.5-rc.2** runtime includes **existing local modifications**. Matching version numbers alone do not guarantee compatibility with an unmodified upstream installation.
-- Commands require an explicitly configured supported isolated executor. There is no unisolated host-shell fallback.
-- Interrupted tasks become `unknown` after restart and are never replayed automatically.
-- Installation, removal and task control in two independent Homes were checked using local scripted responses, without real model calls or Docker development commands. These checks do not establish complete business-task acceptance or cost savings.
+- Windows tests use an isolated native **0.2.1-rc.3** runtime: install/remove, ordinary sessions, independent child defaults, mixed providers and restart persistence. A headless browser checks the native settings page. The installed desktop backend also loads the plugin in an isolated test profile.
+- **Desktop URL installation, desktop transport and real account sign-in/model calls remain unverified.** Controlled local responses do not establish subscription availability, quota billing or long-term compatibility.
+- Community adapters retain their original authorization and credential protection. This package is not endorsed by the model providers.
+
+## Legacy task plugin
+
+[v0.2.0](https://github.com/CalvinL10/llm-gateway/releases/tag/v0.2.0) task pages, call limits, cancellation and continuation remain documented in the [legacy guide](integrations/dsh-agent-gateway/README.en.md). That plugin targets a locally modified DSH 0.1.5 runtime and **has not been ported to 0.2.1 in this candidate**. Ordinary conversations do not require it.
 
 [Third-party notices](THIRD_PARTY_NOTICES.md). Older experiments are historical context, not the current installation entry point.

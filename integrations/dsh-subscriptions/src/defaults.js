@@ -23,8 +23,12 @@ export function apply(ctx) {
       const operation=writes.then(async()=>{
         const catalog=await ctx.sessionController.modelCatalog();
         const available=route=>catalog.groups.some(group=>group.id===route.provider && group.models.some(model=>model.id===route.model));
-        for (const selected of [value.main,value.child,...value.childSelection?.allowedModels ?? []])
+        for (const selected of [value.main,value.child])
           if (selected && !available(selected)) throw new Error(`当前模型目录中没有 ${selected.provider}/${selected.model}`);
+        const savedModels=ctx.get('subagentModelSelection')?.current()?.allowedModels ?? [];
+        for(const selected of value.childSelection?.allowedModels ?? [])
+          if(!available(selected)&&!savedModels.some(saved=>saved.provider===selected.provider&&saved.model===selected.model))
+            throw new Error(`当前模型目录中没有 ${selected.provider}/${selected.model}`);
         if (value.childSelection?.enabled && value.childSelection.allowedModels.length===0)
           throw new Error('请至少选择一个允许子代理使用的模型');
         if (value.child !== undefined) {

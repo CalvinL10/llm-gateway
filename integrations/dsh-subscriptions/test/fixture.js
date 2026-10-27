@@ -4,16 +4,21 @@ import {randomUUID} from 'node:crypto';
 export const inject=['llm','connection','sessionController','sessions','agents'];
 export function apply(ctx,config) {
   const calls=[];
+  const delegated=new Set();
+  ctx.on('llm/stream',async function* (options,next){
+    const session=ctx.sessions.get(options.sessionId);
+    calls.push({sessionId:options.sessionId,parentSession:session?.header.parentSession,provider:options.provider,model:options.model,isChild:session?.header.origin==='subagent'});
+    yield* next();
+  });
   class Scripted extends LlmAdapter {
     async listModels(provider) {return [{provider,id:'model',name:`Scripted ${provider}`,contextWindow:32000}];}
     async *stream(options) {
       const session=ctx.sessions.get(options.sessionId);
       const isChild=session?.header.origin==='subagent';
-      calls.push({sessionId:options.sessionId,parentSession:session?.header.parentSession,provider:options.provider,model:options.model,isChild});
       const text=options.messages.filter(m=>m.role==='user').flatMap(m=>m.content).filter(b=>b.type==='text').map(b=>b.text).join('\n');
-      const done=options.messages.flatMap(m=>m.content).some(b=>b.type==='tool-result');
       let blocks;
-      if (!isChild && text.includes('delegate') && !done) {
+      if (!isChild && text.includes('delegate') && !delegated.has(options.sessionId)) {
+        delegated.add(options.sessionId);
         const args={description:'Offline route test',prompt:'Answer with one scripted word'};
         if(text.includes('explicit')) Object.assign(args,{provider:'fixture-api',model:'model'});
         blocks=[{type:'tool-call',id:randomUUID(),name:'subagent',arguments:JSON.stringify(args)}];

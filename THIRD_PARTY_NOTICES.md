@@ -1,5 +1,16 @@
 # Third-party attribution
 
+## DSH 0.2.1 subscription candidate
+
+The v0.3.0-rc.1 package bundles three connection modules from the MIT-licensed
+`@eddyskywalker/dsh-chatgpt-subscription` 0.42.0. Its full upstream license is
+included in the package. See the [package notices](integrations/dsh-subscriptions/THIRD_PARTY_NOTICES.md)
+for the pinned revision, composition scope and runtime dependencies. DSH
+0.2.1-rc.3 and its native components are supplied by the host; they are not
+bundled in the release asset.
+
+## Legacy task integration
+
 This project extends an existing runtime, not a self-built agent engine. Package metadata and bundled licenses were inspected locally; this is not a complete transitive dependency inventory.
 
 | Component | Reused capability | Observed license |
@@ -11,7 +22,7 @@ This project extends an existing runtime, not a self-built agent engine. Package
 | `@eddyskywalker/dsh-chatgpt-subscription` 0.3.5 | Subscription connection and OAuth | MIT; Copyright (c) 2026 DSH ChatGPT Subscription contributors |
 | `zod` 4.6.5 | Runtime field validation | MIT |
 
-Package metadata identifies upstream repositories including `deepseek-ai/deepseek-harness`, `earendil-works/pi`, and `Aa728848/dsh-chatgpt-subscription`. Runtime packages and generated subscription copies are not distributed here. `subscription-copy.mjs` describes a project-specific local adaptation, not unmodified upstream behavior.
+Package metadata identifies upstream repositories including `deepseek-ai/deepseek-harness`, `earendil-works/pi`, and `Aa728848/dsh-chatgpt-subscription`. The legacy task package does not distribute its runtime or generated subscription copies. `subscription-copy.mjs` describes a project-specific local adaptation, not unmodified upstream behavior.
 
 Project contributions are the task API, actual-call attribution, shared admission ledger, outcome projection, confined executor integration, and tests. Integration tests use scripted responses through real DSH/adapter components; [recorded real-model acceptance](docs/verification.md) is scoped separately.
 

@@ -31,7 +31,8 @@ function Account({kind,label}) {
   const login=()=>action(async()=>{
     const next=kind==='codex'?await codex.startLogin():await request(`${prefixes[kind]}/login`,{});
     setFlow({...next,status:next.status??'pending'});
-    if(next.authUrl) window.open(next.authUrl,'_blank','noopener,noreferrer');
+    // Claude's original host handler already opens the browser.
+    if(next.authUrl && kind!=='claude') window.open(next.authUrl,'_blank','noopener,noreferrer');
   });
   return <section className="gateway-card">
     <h3>{label}</h3><p>{status ? authenticated?'已连接':'尚未连接':'正在读取连接状态…'}</p>
@@ -52,24 +53,34 @@ function Account({kind,label}) {
 function Models() {
   const [state,setState]=useState<any>(null),[main,setMain]=useState(''),[child,setChild]=useState(''),[allowed,setAllowed]=useState<string[]>([]),[enabled,setEnabled]=useState(false),[message,setMessage]=useState(''),[busy,setBusy]=useState(false);
   const key=route=>JSON.stringify([route.provider,route.model]);
+  const childValue=next=>{const values=[...new Set(next.presets.flatMap(p=>p.routes).map(route=>route?key(route):''))];return values.length>1?'mixed':values[0]??'';};
   const load=async()=>{
     const next=await request('/api/gateway-model-defaults'); setState(next);setMain(key(next.main));
-    const first=next.presets.flatMap(p=>p.routes).find(Boolean);setChild(first?key(first):'');
+    setChild(childValue(next));
     setEnabled(next.childSelection?.enabled??false);setAllowed((next.childSelection?.allowedModels??[]).map(key));
   };
   useEffect(()=>{load().catch(e=>setMessage(e.message));},[]);
   if(!state) return <section className="gateway-card"><h3>主模型与子代理</h3><p>{message||'正在读取宿主模型目录…'}</p></section>;
   const options=state.catalog.groups.flatMap(group=>group.models.map(model=>({key:JSON.stringify([group.id,model.id]),label:`${group.name} / ${model.name}`})));
+  const visible=new Set(options.map(option=>option.key));
+  const saved=[key(state.main),...state.presets.flatMap(p=>p.routes).filter(Boolean).map(key),...allowed];
+  for(const value of new Set(saved))if(!visible.has(value)){const [provider,model]=JSON.parse(value);options.push({key:value,label:`${provider} / ${model}（已保存，当前不可用）`});}
   const route=value=>{const [provider,model]=JSON.parse(value);return {provider,model};};
   return <section className="gateway-card"><h3>主模型与子代理</h3>
     <p>可选择宿主已接入的任意渠道。保存后用于新对话；当前对话仍可在输入框旁切换主模型。</p>
-    <label>默认主模型<select value={main} onChange={e=>setMain(e.target.value)}>{options.map(o=><option key={o.key} value={o.key}>{o.label}</option>)}</select></label>
-    <label>默认子模型<select value={child} onChange={e=>setChild(e.target.value)}><option value="">使用 DSH 原生继承方式</option>{options.map(o=><option key={o.key} value={o.key}>{o.label}</option>)}</select></label>
+    <label>默认主模型<select aria-label="默认主模型" value={main} onChange={e=>setMain(e.target.value)}>{options.map(o=><option key={o.key} value={o.key}>{o.label}</option>)}</select></label>
+    <label>默认子模型<select aria-label="默认子模型" value={child} onChange={e=>setChild(e.target.value)}>{childValue(state)==='mixed'&&<option value="mixed">保留各预设已有的不同默认值</option>}<option value="">使用 DSH 原生继承方式</option>{options.map(o=><option key={o.key} value={o.key}>{o.label}</option>)}</select></label>
     <label><input type="checkbox" checked={enabled} onChange={e=>setEnabled(e.target.checked)} />允许不同子代理另选模型</label>
-    {enabled && <fieldset><legend>允许子代理选择的模型（DSH 原生设置）</legend><button onClick={()=>setAllowed(options.map(o=>o.key))}>选择全部渠道</button>
+    {enabled && <fieldset><legend>允许子代理选择的模型（DSH 原生设置）</legend><button onClick={()=>setAllowed([...new Set([...allowed,...options.filter(o=>visible.has(o.key)).map(o=>o.key)])])}>选择全部渠道</button>
       {options.map(o=><label key={o.key}><input type="checkbox" checked={allowed.includes(o.key)} onChange={e=>setAllowed(e.target.checked?[...allowed,o.key]:allowed.filter(k=>k!==o.key))}/>{o.label}</label>)}</fieldset>}
     <div className="gateway-actions"><button disabled={busy} onClick={async()=>{setBusy(true);setMessage('');try{
-      await request('/api/gateway-model-defaults',{main:route(main),child:child?route(child):null,childSelection:{enabled,allowedModels:allowed.map(route)}});
+      const patch:any={};
+      if(main!==key(state.main))patch.main=route(main);
+      if(child!==childValue(state))patch.child=child?route(child):null;
+      const savedAllowed=(state.childSelection?.allowedModels??[]).map(key);
+      if(enabled!==(state.childSelection?.enabled??false)||allowed.length!==savedAllowed.length||allowed.some(key=>!savedAllowed.includes(key)))
+        patch.childSelection={enabled,allowedModels:allowed.map(route)};
+      await request('/api/gateway-model-defaults',patch);
       await load();setMessage('已保存。请新建对话使用。');
     }catch(e){setMessage(`保存未完成：${e.message}。请刷新检查已保存项。`);}finally{setBusy(false);}}}>保存设置</button><button disabled={busy} onClick={()=>load().catch(e=>setMessage(e.message))}>刷新目录与设置</button></div>
     {state.catalog.failures.map(f=><p key={f.id}>{f.name}：{f.message}</p>)}

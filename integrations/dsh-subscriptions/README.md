@@ -1,12 +1,14 @@
 # DSH 订阅连接与主／子模型设置
 
+**中文** | [English](README.en.md)
+
 目标宿主：Windows 桌面版 / Web，DSH **0.2.1-rc.3**。普通 DSH 新对话使用
 原生模型选择器；本包增加 Codex、Antigravity、Claude 三条社区订阅连接。
 DeepSeek、自定义 API 和其他宿主 Provider 继续由宿主管理。
 
 ## 安装和使用
 
-将本版本的 `.tgz` 下载链接粘贴到 DSH「插件 → 添加插件」最上方输入框，
+将 [v0.3.0-rc.1 安装包下载链接](https://github.com/CalvinL10/llm-gateway/releases/download/v0.3.0-rc.1/llm-gateway-dsh-subscriptions-0.3.0-rc.1.tgz) 粘贴到 DSH「插件 → 添加插件」最上方输入框，
 或者填写已下载安装包的绝对路径。安装源保持 npm 官方源。GitHub 仓库首页
 和自动生成的 Source code 压缩包不是本插件安装包。
 
@@ -27,7 +29,18 @@ DeepSeek、自定义 API 和其他宿主 Provider 继续由宿主管理。
 ## 保留旧任务功能
 
 历史任务插件及其说明保留在 `integrations/dsh-agent-gateway`，不作为普通
-对话使用订阅模型的前提。新版可选任务入口的兼容情况以本次验证记录为准。
+对话使用订阅模型的前提。本候选版未迁移旧任务页面到 0.2.1。
+
+## 候选版验证范围
+
+Windows 上的原生 0.2.1-rc.3 独立 Web 环境已通过安装／卸载、普通会话、
+默认及单次子模型、混用渠道、真实本地 HTTP API、重启持久化、授权与来源
+校验，以及无界面浏览器页面检查。三家原始适配器通过受控协议响应检查。
+本机桌面版自带的后端、Electron Node 和插件安装器也已通过独立测试 profile
+的安装与启动检查，没有打开桌面窗口或读取用户现有账号。
+
+**桌面版粘贴链接安装、桌面通信、三家真实账号的登录和模型调用仍待验证。**
+测试未消耗真实订阅额度。完整记录见仓库 `docs/releases/v0.3.0-rc.1.md`。
 
 ## 开发
 
@@ -35,3 +48,5 @@ DeepSeek、自定义 API 和其他宿主 Provider 继续由宿主管理。
 版本的上游源码并保留许可；可用 `DSH_SUBSCRIPTION_SOURCE` 指向已经取得的
 0.42.0 源码。构建过程不读取账号凭据。运行时不下载源码或执行构建脚本。
 宿主集成测试使用 `DSH_TEST_RUNTIME` 指向已安装的 0.2.1-rc.3 npm 运行时。
+桌面后端测试使用 `DSH_DESKTOP_ROOT` 指向桌面安装目录；浏览器测试使用
+`DSH_BROWSER_PREVIEW` 指向独立预览的私有 URL 文件。未配置时对应测试会跳过。

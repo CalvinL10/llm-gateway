@@ -62,3 +62,22 @@ test('user-selected native allowlist may contain subscription, DeepSeek and API 
   assert.equal((await invoke({childSelection:{enabled:true,allowedModels}})).status,200);
   assert.deepEqual(entries[1].options.config,{enabled:true,allowedModels});
 });
+
+test('saved unavailable child routes survive unrelated allowlist edits, but new unknown routes are rejected',async()=>{
+  const {invoke,entries}=context();
+  const unavailable={provider:'temporarily-offline',model:'saved-model'};
+  entries[1].options.config={enabled:true,allowedModels:[unavailable]};
+  const allowedModels=[unavailable,{provider:'api-channel',model:'model'}];
+  assert.equal((await invoke({childSelection:{enabled:true,allowedModels}})).status,200);
+  assert.deepEqual(entries[1].options.config.allowedModels,allowedModels);
+  assert.equal((await invoke({childSelection:{enabled:true,allowedModels:[{provider:'unknown',model:'new-model'}]}})).status,400);
+  assert.deepEqual(entries[1].options.config.allowedModels,allowedModels);
+});
+
+test('an empty save preserves per-preset defaults and existing main reasoning settings',async()=>{
+  const {invoke,entries,calls}=context();
+  entries[0].options.config=childDefaults(preset,{provider:'api-channel',model:'model',reasoningEffort:'high'}).config;
+  const before=structuredClone(entries);
+  assert.equal((await invoke({})).status,200);
+  assert.deepEqual(entries,before);assert.deepEqual(calls,[]);
+});
