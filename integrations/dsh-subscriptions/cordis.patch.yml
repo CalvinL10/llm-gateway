@@ -1,0 +1,5 @@
+- insert:
+    - id: gateway-subscriptions
+      name: '@llm-gateway/dsh-subscriptions'
+    - id: gateway-model-defaults
+      name: '@llm-gateway/dsh-subscriptions/defaults'
