@@ -111,15 +111,16 @@
     const routeKey = route => JSON.stringify([route.provider, route.model, route.reasoningEffort ?? null]);
     function routeLabel(route) { return route.provider + '/' + route.model + (route.reasoningEffort ? ' · ' + route.reasoningEffort : ''); }
     function selectedScheduling() {
-      const root = latest.scheduling?.roots?.find(item => routeKey(item) === $('root-model').value);
-      const children = [...$('child-models').selectedOptions].map(option => latest.scheduling?.children?.find(item => routeKey(item) === option.value)).filter(Boolean);
+      if (!latest.scheduling) return null;
+      const root = latest.scheduling.roots?.find(item => routeKey(item) === $('root-model').value);
+      const children = [...($('child-models').selectedOptions ?? [])].map(option => latest.scheduling.children?.find(item => routeKey(item) === option.value)).filter(Boolean);
       return root ? {root, mode:$('schedule-mode').value, children} : null;
     }
     function saveDraft() {
       state.draft.goal = $('goal').value;
       state.draft.workspaceId = $('workspace').value || state.draft.workspaceId;
       state.draft.maxCalls = Number($('call-limit').value) || state.draft.maxCalls;
-      state.draft.scheduling = selectedScheduling() ?? state.draft.scheduling;
+      state.draft.scheduling = latest.scheduling ? (selectedScheduling() ?? state.draft.scheduling) : null;
       storageReady = writeState(state);
       if (!storageReady) setError(safeErrors.STORAGE_UNAVAILABLE);
       $('request').textContent = '请求身份 ' + state.draft.requestId + (state.draft.pending ? ' · 等待查询确认' : '');
@@ -168,7 +169,7 @@
     }
     function schedulingOptions(data) {
       const scheduling = data.scheduling;
-      if (!scheduling) { $('root-model').replaceChildren(); $('child-models').replaceChildren(); return; }
+      if (!scheduling) { $('root-model').replaceChildren(); $('child-models').replaceChildren(); state.draft.scheduling = null; return; }
       const current = state.draft.scheduling ?? scheduling.defaults?.scheduling;
       $('root-model').replaceChildren();
       for (const route of scheduling.roots ?? []) { const option = document.createElement('option'); option.value = routeKey(route); option.textContent = routeLabel(route); $('root-model').append(option); }
@@ -246,7 +247,10 @@
       if (!policy) { $('policy').textContent = ''; return; }
       const routes = policy.allowedRoutes.map(route => route.provider + '/' + route.model).join('、');
       const limits = (authorizedTaskMaxCalls?.length ? authorizedTaskMaxCalls : [policy.maxCalls]).join('、');
-      $('policy').textContent = `服务端授权模型范围：${routes}；默认 ${policy.maxCalls} 次共享模型调用；可提交任务时单独选择主模型、委派模式、子模型和上限。命令执行${capabilities?.commandExecution === 'enabled' ? 'Docker 隔离执行器可用' : capabilities?.commandExecution === 'disabled' ? '不可用' : '状态未知'}。`;
+      const command = capabilities?.commandExecution === 'enabled' ? 'Docker 隔离执行器可用' : capabilities?.commandExecution === 'disabled' ? '不可用' : '状态未知';
+      $('policy').textContent = latest.scheduling
+        ? `服务端授权模型范围：${routes}；默认 ${policy.maxCalls} 次共享模型调用；新任务已授权限额 ${limits}；可提交任务时单独选择主模型、委派模式、子模型和上限。命令执行${command}。`
+        : `服务端授权模型范围：${routes}；默认 ${policy.maxCalls} 次模型调用；新任务已授权限额 ${limits}；命令执行${command}。`;
     }
     function renderTask(task) {
       $('calls').replaceChildren(); $('operations').replaceChildren(); $('approvals').replaceChildren();
@@ -297,7 +301,19 @@
       $('reconciliation').append(...reconciliations);
       $('result-ref').textContent = '宿主会话引用 ' + task.sessionId;
       $('result').textContent = task.artifact || '没有可显示的最终文本。部分成果仍保留在模型调用和工具证据中。';
-      $('validation').textContent = `测试证据：${report.validation === 'not-established' ? '未建立，命令成功不能自动算测试通过。' : report.validation} 用户业务验收：${report.businessOutcome === 'unverified' ? '未验收。' : report.businessOutcome}`;
+      const sensorLabels = {
+        L1_AUTO_PASS: 'L1 自动放行（未检出策略违规）',
+        L2_AUTO_WARNING: 'L2 自动告警（建议核对）',
+        L3_HUMAN_REQUIRED: 'L3 需人工复核',
+      };
+      const sensor = report.policySensor;
+      const sensorFindings = Array.isArray(sensor?.findings)
+        ? sensor.findings.map(item => item?.code).filter(Boolean)
+        : [];
+      const sensorText = sensor?.gateLevel
+        ? ` 策略传感器：${sensorLabels[sensor.gateLevel] ?? sensor.gateLevel}${sensorFindings.length ? '（' + sensorFindings.join('、') + '）' : ''}。`
+        : '';
+      $('validation').textContent = `测试证据：${report.validation === 'not-established' ? '未建立，命令成功不能自动算测试通过。' : report.validation} 用户业务验收：${report.businessOutcome === 'unverified' ? '未验收。' : report.businessOutcome}${sensorText}`;
     }
     function render(data) {
       latest = data;
@@ -365,6 +381,7 @@
       if (!storageReady) return;
       if (!payload.goal) { $('error').textContent = '请输入目标。'; return; }
       payload.pending = undefined;
+      if (!latest.scheduling || payload.scheduling == null) payload.scheduling = undefined;
       state.draft = {...payload, pending:true}; storageReady = writeState(state);
       if (!storageReady) { showError({code:'STORAGE_UNAVAILABLE'}); return; }
       $('goal').disabled = $('workspace').disabled = true;
@@ -384,7 +401,7 @@
           throw conflict;
         }
         state.selectedTaskId = task.id;
-        state.draft = freshDraft(payload.workspaceId, payload.maxCalls, payload.scheduling); storageReady = writeState(state);
+        state.draft = freshDraft(payload.workspaceId, payload.maxCalls, payload.scheduling ?? null); storageReady = writeState(state);
         await refresh();
       } catch (error) {
         if (error.httpStatus && error.httpStatus < 500) {

@@ -1,8 +1,11 @@
 import { execFile } from 'node:child_process';
-import { access, readFile } from 'node:fs/promises';
+import { lstatSync, realpathSync, statSync } from 'node:fs';
+import { access, open, readFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import { promisify } from 'node:util';
-import { basename } from 'node:path';
-import { toolEvent, approvalEvent, commandResult, finalAssistantText, publicTask, auditExport } from './report.js';
+import { basename, delimiter, dirname, isAbsolute, relative, resolve, sep } from 'node:path';
+import { toolEvent, approvalEvent, commandResult, finalAssistantText, publicTask, auditExport,
+  classifyRepoPath, analyzeTestMetrics, evaluatePolicySensor } from './report.js';
 
 import { z } from 'zod';
 
@@ -78,12 +81,45 @@ const facts = {sessionId: z.string(), parentSessionId: z.string().nullable(), pr
   reasoningEffort:z.string().nullable().optional(), purpose: z.string().nullable()};
 
 const attemptStatus = z.enum(['queued','running','cancel-requested','completed','reconciled','failed','limited','stopped','unknown']);
+const countInt = z.number().int().min(0);
+const safeCodeString = z.string().regex(/^[A-Z0-9_]{1,64}$/);
+const policySensorSchema = z.object({
+  schema: z.literal('gateway-policy-sensor-v1'),
+  evaluatedAt: z.string().nullable(),
+  gateLevel: z.enum(['L1_AUTO_PASS', 'L2_AUTO_WARNING', 'L3_HUMAN_REQUIRED']),
+  requiresHumanReview: z.boolean(),
+  claimEvidenceStatus: z.enum(['consistent', 'unverified-edits', 'unverified-claim', 'mismatch']),
+  claims: z.object({hasFinalText: z.boolean(), claimedTestsPassed: z.boolean(), claimedFileChanged: z.boolean()}).strict(),
+  evidenceCounts: z.object({
+    confirmedEdits: countInt, succeededCommands: countInt, failedCommands: countInt,
+    unconfirmedCommands: countInt, failedTools: countInt, unconfirmedTools: countInt,
+  }).strict(),
+  git: z.object({
+    coverage: z.enum(['baseline-delta', 'git-unavailable', 'skipped-on-cancel', 'not-applicable']),
+    reason: safeCodeString.nullable(),
+    baselineDirtyEntries: countInt.nullable(),
+    headMoved: z.boolean().nullable(),
+    truncated: z.boolean().nullable(),
+    delta: z.object({
+      totalChangedFiles: countInt, addedFiles: countInt, modifiedFiles: countInt, deletedFiles: countInt,
+      categories: z.object({test: countInt, security: countInt, contract: countInt, docs: countInt, source: countInt, other: countInt}).strict(),
+      testTamper: z.object({modifiedTestFiles: countInt, skipAddedFiles: countInt, assertionsReducedFiles: countInt}).strict(),
+    }).strict().nullable(),
+  }).strict(),
+  findings: z.array(z.object({
+    code: safeCodeString,
+    severity: z.enum(['L2', 'L3']),
+    category: z.enum(['git-tamper', 'scope-boundary', 'claim-evidence', 'execution-state']),
+    count: countInt.optional(),
+  }).strict()),
+}).strict();
 const attemptRecord = z.object({id:z.uuid(), kind:z.enum(['initial','continue','supplement','reconcile']),
   instruction:z.string(), additionalCalls:continuationIncrement, budgetBefore:callLimit, budgetAfter:callLimit,
   callStart:z.number().int().min(0), callEnd:z.number().int().min(0).nullable(), status:attemptStatus,
   queuedAt:z.string().optional(), startedAt:z.string().nullable(), endedAt:z.string().nullable(), artifact:z.string().nullable(),
   failureCode:z.string().nullable(), failureStage:z.string().nullable(),
-  reconciliationEvidence:z.record(z.string(),z.unknown()).optional()});
+  reconciliationEvidence:z.record(z.string(),z.unknown()).optional(),
+  policySensor:policySensorSchema.optional()});
 const record = z.object({id: z.uuid(), sessionId: z.string(), goal: z.string(), policy: policySchema,
   workspaceId: workspaceId.optional(),
   status: attemptStatus,
@@ -223,7 +259,7 @@ export async function apply(ctx, config, {streamBoundary, lifecycleBinding, allo
     const observation = observations.get(id);
     return publicTask(observedTask(id), observation?.lifecycle);
   };
-  const persistFinal = async (id, status, artifact, failureCode = null, failureStage = null, stopConfirmation = null) => {
+  const persistFinal = async (id, status, artifact, failureCode = null, failureStage = null, stopConfirmation = null, policySensor = null) => {
     // A locally terminal task must not dispatch again even when its terminal write fails.
     stopIntents.add(id);
     // A successful terminal write supersedes any earlier unconfirmed observation.
@@ -231,7 +267,7 @@ export async function apply(ctx, config, {streamBoundary, lifecycleBinding, allo
     // the committed row before this continuation resumes.
     observations.delete(id);
     try {
-      await ledger.finish(id, status, artifact, failureCode, failureStage);
+      await ledger.finish(id, status, artifact, failureCode, failureStage, policySensor);
     } catch (error) {
       observePersistenceFailure(id, error, {state: 'ended-local', localOutcome: status,
         persistence: 'unconfirmed', stopConfirmation});
@@ -522,14 +558,41 @@ export async function apply(ctx, config, {streamBoundary, lifecycleBinding, allo
     ].join('\n\n');
     return [prompt, workspaceToolContext(workspace)].join('\n\n');
   };
+  const comparablePath = value => process.platform === 'win32' ? value.toLowerCase() : value;
+  const insideCanonical = (root, target) => {
+    const rel = relative(root, target);
+    return rel === '' || (!isAbsolute(rel) && rel !== '..' && !rel.startsWith('..' + sep));
+  };
+  function resolveTrustedGitBinary(excludeRoot = null) {
+    const rawPath = process.env.PATH ?? process.env.Path ?? '';
+    const candidates = process.platform === 'win32' ? ['git.exe'] : ['git'];
+    for (const rawDir of rawPath.split(delimiter)) {
+      if (!rawDir || !isAbsolute(rawDir)) continue;
+      let dir;
+      try { dir = realpathSync.native(rawDir); } catch { continue; }
+      if (excludeRoot && insideCanonical(excludeRoot, dir)) continue;
+      for (const name of candidates) {
+        const candidate = resolve(dir, name);
+        try {
+          if (statSync(candidate).isFile()) return candidate;
+        } catch {}
+      }
+    }
+    return null;
+  }
+
   async function reconciliationEvidence(task, workspace, agent, security) {
     let git;
     try {
-      // Avoid optional index writes and repository-configured fsmonitor hooks: reconciliation
-      // observes current Git state but must not execute repository code or mutate the index.
-      const {stdout} = await execFileAsync('git', ['--no-optional-locks','-c','core.fsmonitor=false',
-        '-c','core.untrackedCache=false','status','--porcelain=v1','--untracked-files=all'],
-        {cwd:workspace.cwd, windowsHide:true, timeout:10000, maxBuffer:1024 * 1024});
+      // Avoid optional index writes, lazy fetches, inherited git env overrides, and configured filters/fsmonitor:
+      // reconciliation observes current Git state but must not execute repository code or mutate the index.
+      const canonicalWorkspace = realpathSync.native(workspace.cwd);
+      const gitBin = resolveTrustedGitBinary(canonicalWorkspace);
+      if (!gitBin) throw new Error('Trusted git executable unavailable');
+      const env = gitSensorEnv(canonicalWorkspace, {useCeiling: false});
+      const filterOverrides = await readFilterOverrides(gitBin, canonicalWorkspace, env);
+      const {stdout} = await runReadOnlyGit(gitBin, canonicalWorkspace, env,
+        ['status', '--porcelain=v1', '--untracked-files=all'], {timeout: 10000, filterOverrides});
       const lines = stdout.split(/\r?\n/).filter(Boolean);
       git = {available:true, clean:lines.length === 0, changedEntries:lines.length,
         stagedEntries:lines.filter(line => line[0] !== ' ' && line[0] !== '?').length,
@@ -548,10 +611,353 @@ export async function apply(ctx, config, {streamBoundary, lifecycleBinding, allo
         toolResults:events.filter(event => event.type === 'tool/result').length}};
   }
 
+  const gitSensorEnv = (canonicalWorkspace, {useCeiling = true} = {}) => {
+    const env = {...process.env};
+    for (const key of ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_OBJECT_DIRECTORY',
+      'GIT_ALTERNATE_OBJECT_DIRECTORIES', 'GIT_COMMON_DIR', 'GIT_CONFIG_PARAMETERS', 'GIT_CONFIG_COUNT'])
+      delete env[key];
+    env.GIT_TERMINAL_PROMPT = '0';
+    env.GIT_ATTR_NOSYSTEM = '1';
+    const parent = dirname(canonicalWorkspace);
+    if (useCeiling && parent !== canonicalWorkspace) env.GIT_CEILING_DIRECTORIES = parent;
+    else delete env.GIT_CEILING_DIRECTORIES;
+    return env;
+  };
+  const runReadOnlyGit = (gitBin, targetCwd, env, args, {timeout = 5000, signal, filterOverrides = []} = {}) => execFileAsync(
+    gitBin,
+    ['-C', targetCwd, '--no-optional-locks', '--no-lazy-fetch', '-c', 'core.fsmonitor=false',
+      '-c', 'core.untrackedCache=false', '-c', 'core.quotepath=false', '-c', 'core.autocrlf=false',
+      '-c', 'diff.external=false', ...filterOverrides, ...args],
+    {cwd: dirname(gitBin), env, windowsHide: true, timeout, maxBuffer: 4 * 1024 * 1024, ...(signal ? {signal} : {})}
+  );
+  async function readFilterOverrides(gitBin, targetCwd, env, signal) {
+    try {
+      const {stdout} = await runReadOnlyGit(gitBin, targetCwd, env,
+        ['config', '-z', '--name-only', '--get-regexp', '^filter\\..*\\.(clean|process|smudge)$'], {signal});
+      const keys = [...new Set(stdout.split('\0').map(item => item.trim()).filter(Boolean))];
+      for (const key of keys) {
+        if (key.includes('=') || /[\r\n]/.test(key)) throw new Error('Unsafe git filter key');
+      }
+      return keys.flatMap(key => ['-c', `${key}=`]);
+    } catch (error) {
+      if (error?.code === 1) return [];
+      throw error;
+    }
+  }
+  async function readStagedBlobMap(gitBin, targetCwd, env, signal, filterOverrides) {
+    const map = new Map();
+    const {stdout} = await runReadOnlyGit(gitBin, targetCwd, env, ['ls-files', '--stage', '-z'],
+      {signal, filterOverrides});
+    for (const entry of stdout.split('\0')) {
+      if (!entry) continue;
+      const tab = entry.indexOf('\t');
+      if (tab === -1) continue;
+      const parts = entry.slice(0, tab).split(' ');
+      const sha = parts[1], stage = parts[2];
+      const path = entry.slice(tab + 1).replaceAll('\\', '/');
+      if (sha && path && (!map.has(path) || stage === '0')) map.set(path, `${stage}:${sha}`);
+    }
+    return map;
+  }
+  function parsePorcelainZ(text) {
+    const tokens = String(text ?? '').split('\0');
+    const byPath = new Map();
+    for (let index = 0; index < tokens.length; index++) {
+      const token = tokens[index];
+      if (!token || token.length < 4 || token[2] !== ' ') continue;
+      const xy = token.slice(0, 2);
+      const path = token.slice(3).replaceAll('\\', '/').replace(/\/+$/, '');
+      const origPath = (xy[0] === 'R' || xy[0] === 'C' || xy[1] === 'R' || xy[1] === 'C') && index + 1 < tokens.length
+        ? tokens[++index].replaceAll('\\', '/').replace(/\/+$/, '') : null;
+      if (!path) continue;
+      const prior = byPath.get(path);
+      if (prior) byPath.set(path, {xy: `${prior.xy}+${xy}`, path, origPath: prior.origPath ?? origPath});
+      else byPath.set(path, {xy, path, origPath});
+    }
+    return [...byPath.values()];
+  }
+  const sensorProtectedNames = new Set(['.git', '.hg', '.svn', '.local', '.ssh', '.aws', '.azure', '.kube',
+    '.codex', '.agents', '.npmrc', '.netrc', '.pypirc', '.credentials', '.credentials.yaml',
+    '.credentials.yml', 'credentials.json', 'id_rsa', 'id_ed25519']);
+  const isSensorProtectedName = name => sensorProtectedNames.has(name.toLowerCase()) ||
+    /^\.env(?:\.|$)/i.test(name) || /\.(?:pem|p12|pfx|key)$/i.test(name);
+  async function readWorkspaceFileSnapshot(canonicalWorkspace, posixRelPath) {
+    const parts = posixRelPath.split('/').filter(Boolean);
+    if (!parts.length || parts.some(part => part === '.' || part === '..'))
+      return {state: 'non-regular', hash: 'INVALID_REL_PATH', text: null};
+    let cursor = canonicalWorkspace, leafStat = null;
+    for (let index = 0; index < parts.length; index++) {
+      const part = parts[index];
+      cursor = resolve(cursor, part);
+      if (!insideCanonical(canonicalWorkspace, cursor))
+        return {state: 'non-regular', hash: 'OUTSIDE_WORKSPACE', text: null};
+      let stat;
+      try { stat = lstatSync(cursor); } catch (error) {
+        if (error?.code === 'ENOENT') return {state: 'missing', hash: 'MISSING', text: null};
+        throw error;
+      }
+      if (stat.isSymbolicLink()) return {state: 'non-regular', hash: 'SYMLINK', text: null};
+      if (index < parts.length - 1 && !stat.isDirectory())
+        return {state: 'non-regular', hash: 'NON_DIR_ANCESTOR', text: null};
+      if (isSensorProtectedName(part))
+        return {state: 'protected', hash: `PROTECTED:${stat.size}:${stat.mtimeMs}`, text: null};
+      if (index === parts.length - 1) leafStat = stat;
+    }
+    if (!leafStat || !leafStat.isFile() || leafStat.nlink > 1)
+      return {state: 'non-regular', hash: `NON_REGULAR:${leafStat?.mode}:${leafStat?.nlink}:${leafStat?.size}`, text: null};
+    const canonicalFile = realpathSync.native(cursor);
+    if (!insideCanonical(canonicalWorkspace, canonicalFile))
+      return {state: 'non-regular', hash: 'OUTSIDE_WORKSPACE', text: null};
+    let handle;
+    try {
+      handle = await open(canonicalFile, 'r');
+      const fstat = await handle.stat();
+      if (!fstat.isFile() || fstat.nlink > 1)
+        return {state: 'non-regular', hash: `NON_REGULAR:${fstat.mode}:${fstat.nlink}:${fstat.size}`, text: null};
+      const maxBytes = 1024 * 1024;
+      if (fstat.size > maxBytes)
+        return {state: 'oversized', hash: `OVERSIZED:${fstat.size}:${fstat.mtimeMs}`, text: null};
+      const buffer = Buffer.allocUnsafe(maxBytes + 1);
+      let total = 0;
+      while (total <= maxBytes) {
+        const {bytesRead} = await handle.read(buffer, total, buffer.length - total, total);
+        if (bytesRead === 0) break;
+        total += bytesRead;
+      }
+      if (total > maxBytes)
+        return {state: 'oversized', hash: `OVERSIZED:${total}:${fstat.mtimeMs}`, text: null};
+      const bytes = buffer.subarray(0, total);
+      return {
+        state: 'file',
+        hash: createHash('sha256').update(bytes).digest('hex'),
+        text: bytes.toString('utf8'),
+      };
+    } catch (error) {
+      if (error?.code === 'ENOENT') return {state: 'missing', hash: 'MISSING', text: null};
+      throw error;
+    } finally {
+      await handle?.close().catch(() => {});
+    }
+  }
+  const MAX_GIT_SENSOR_ENTRIES = 500;
+  const categoryRank = {test: 5, security: 4, contract: 3, source: 2, docs: 1, other: 0};
+  const effectiveCategory = (path, origPath) => {
+    const destCat = classifyRepoPath(path);
+    const origCat = origPath ? classifyRepoPath(origPath) : null;
+    return origCat && categoryRank[origCat] > categoryRank[destCat] ? origCat : destCat;
+  };
+  async function captureGitBaseline(workspaceCwd, signal) {
+    try {
+      const canonical = realpathSync.native(workspaceCwd);
+      const gitBin = resolveTrustedGitBinary(canonical);
+      if (!gitBin) return {available: false, reason: 'GIT_EXEC_FAILED'};
+      const env = gitSensorEnv(canonical);
+      const {stdout: topOut} = await runReadOnlyGit(gitBin, canonical, env, ['rev-parse', '--show-toplevel'], {signal});
+      const topCanonical = realpathSync.native(topOut.trim());
+      if (comparablePath(topCanonical) !== comparablePath(canonical))
+        return {available: false, reason: 'NOT_A_GIT_REPOSITORY'};
+      const {stdout: gitDirOut} = await runReadOnlyGit(gitBin, canonical, env, ['rev-parse', '--absolute-git-dir'], {signal});
+      const gitDirCanonical = realpathSync.native(gitDirOut.trim());
+      const filterOverrides = await readFilterOverrides(gitBin, canonical, env, signal);
+      let headRef = null;
+      try {
+        const {stdout: headOut} = await runReadOnlyGit(gitBin, canonical, env, ['rev-parse', '--verify', 'HEAD'],
+          {signal, filterOverrides});
+        headRef = headOut.trim() || null;
+      } catch (error) {
+        if (signal?.aborted) throw error;
+      }
+      const {stdout: statusOut} = await runReadOnlyGit(gitBin, canonical, env,
+        ['status', '--porcelain=v1', '-z', '--untracked-files=all'], {signal, filterOverrides});
+      const parsed = parsePorcelainZ(statusOut);
+      const stagedMap = parsed.slice(0, MAX_GIT_SENSOR_ENTRIES).some(entry => entry.xy[0] !== ' ' && entry.xy[0] !== '?')
+        ? await readStagedBlobMap(gitBin, canonical, env, signal, filterOverrides) : new Map();
+      const truncated = parsed.length > MAX_GIT_SENSOR_ENTRIES;
+      const entries = new Map();
+      for (const entry of parsed.slice(0, MAX_GIT_SENSOR_ENTRIES)) {
+        if (signal?.aborted) throw new Error('Cancelled');
+        const snap = await readWorkspaceFileSnapshot(canonical, entry.path);
+        if (signal?.aborted) throw new Error('Cancelled');
+        const category = effectiveCategory(entry.path, entry.origPath);
+        let stagedTestMetrics = null;
+        if (category === 'test' && stagedMap.has(entry.path) && entry.xy[0] !== 'D') {
+          try {
+            const {stdout: stagedText} = await runReadOnlyGit(gitBin, canonical, env,
+              ['show', `:0:${entry.path}`], {signal, filterOverrides});
+            stagedTestMetrics = analyzeTestMetrics(stagedText);
+          } catch (error) {
+            if (signal?.aborted) throw error;
+          }
+        }
+        entries.set(entry.path, {
+          fingerprint: `${entry.xy}|${stagedMap.get(entry.path) ?? ''}|${snap.hash}`,
+          category,
+          testMetrics: category === 'test' && snap.text !== null ? analyzeTestMetrics(snap.text) : null,
+          stagedTestMetrics,
+        });
+      }
+      return {available: true, canonical, gitBin, gitDirCanonical, headRef, truncated, baselineDirtyEntries: parsed.length, entries};
+    } catch {
+      return {available: false, reason: signal?.aborted ? 'CANCELLED_OR_CLOSING' : 'NOT_A_GIT_REPOSITORY'};
+    }
+  }
+  async function computeGitDelta(workspaceCwd, baseline, signal) {
+    if (!baseline?.available) return {
+      coverage: signal?.aborted ? 'skipped-on-cancel' : 'git-unavailable',
+      reason: signal?.aborted ? 'CANCELLED_OR_CLOSING' : (baseline?.reason ?? 'GIT_EXEC_FAILED'),
+      baselineDirtyEntries: null, headMoved: null, truncated: null, delta: null,
+    };
+    try {
+      const env = gitSensorEnv(baseline.canonical);
+      const {stdout: topOut} = await runReadOnlyGit(baseline.gitBin, baseline.canonical, env,
+        ['rev-parse', '--show-toplevel'], {signal});
+      const {stdout: gitDirOut} = await runReadOnlyGit(baseline.gitBin, baseline.canonical, env,
+        ['rev-parse', '--absolute-git-dir'], {signal});
+      if (comparablePath(realpathSync.native(topOut.trim())) !== comparablePath(baseline.canonical) ||
+          comparablePath(realpathSync.native(gitDirOut.trim())) !== comparablePath(baseline.gitDirCanonical)) {
+        return {
+          coverage: 'git-unavailable',
+          reason: 'GIT_REPOSITORY_CHANGED',
+          baselineDirtyEntries: baseline.baselineDirtyEntries, headMoved: null, truncated: null, delta: null,
+        };
+      }
+      const filterOverrides = await readFilterOverrides(baseline.gitBin, baseline.canonical, env, signal);
+      let currentHead = null;
+      try {
+        const {stdout: headOut} = await runReadOnlyGit(baseline.gitBin, baseline.canonical, env,
+          ['rev-parse', '--verify', 'HEAD'], {signal, filterOverrides});
+        currentHead = headOut.trim() || null;
+      } catch (error) {
+        if (signal?.aborted) throw error;
+      }
+      const {stdout: statusOut} = await runReadOnlyGit(baseline.gitBin, baseline.canonical, env,
+        ['status', '--porcelain=v1', '-z', '--untracked-files=all'], {signal, filterOverrides});
+      const parsed = parsePorcelainZ(statusOut);
+      const stagedMap = parsed.slice(0, MAX_GIT_SENSOR_ENTRIES).some(entry => entry.xy[0] !== ' ' && entry.xy[0] !== '?')
+        ? await readStagedBlobMap(baseline.gitBin, baseline.canonical, env, signal, filterOverrides) : new Map();
+      const currentTruncated = parsed.length > MAX_GIT_SENSOR_ENTRIES;
+      const categories = {test: 0, security: 0, contract: 0, docs: 0, source: 0, other: 0};
+      let totalChangedFiles = 0, addedFiles = 0, modifiedFiles = 0, deletedFiles = 0;
+      let modifiedTestFiles = 0, skipAddedFiles = 0, assertionsReducedFiles = 0, opaqueTest = false;
+      const seenPaths = new Set();
+
+      for (const entry of parsed.slice(0, MAX_GIT_SENSOR_ENTRIES)) {
+        if (signal?.aborted) throw new Error('Cancelled');
+        seenPaths.add(entry.path);
+        const snap = await readWorkspaceFileSnapshot(baseline.canonical, entry.path);
+        if (signal?.aborted) throw new Error('Cancelled');
+        const fingerprint = `${entry.xy}|${stagedMap.get(entry.path) ?? ''}|${snap.hash}`;
+        const prior = baseline.entries.get(entry.path);
+        if (prior && prior.fingerprint === fingerprint) continue;
+        totalChangedFiles++;
+        if (snap.state === 'missing') deletedFiles++;
+        else if (!prior && (entry.xy === '??' || entry.xy[0] === 'A')) addedFiles++;
+        else modifiedFiles++;
+
+        const destCat = classifyRepoPath(entry.path);
+        const origCat = entry.origPath ? classifyRepoPath(entry.origPath) : null;
+        const category = effectiveCategory(entry.path, entry.origPath);
+        categories[category]++;
+        if (category === 'test') {
+          modifiedTestFiles++;
+          if (snap.state === 'oversized' || snap.state === 'non-regular' || snap.state === 'protected') {
+            opaqueTest = true;
+            continue;
+          }
+          let beforeMetrics = {assertionCount: 0, skipCount: 0};
+          let beforeStagedMetrics = null;
+          if (prior) {
+            beforeMetrics = prior.testMetrics ?? {assertionCount: 0, skipCount: 0};
+            beforeStagedMetrics = prior.stagedTestMetrics ?? beforeMetrics;
+          } else if (baseline.headRef && entry.xy !== '??') {
+            try {
+              const {stdout: headText} = await runReadOnlyGit(baseline.gitBin, baseline.canonical, env,
+                ['show', `${baseline.headRef}:${entry.origPath ?? entry.path}`], {signal, filterOverrides});
+              beforeMetrics = analyzeTestMetrics(headText);
+              beforeStagedMetrics = beforeMetrics;
+            } catch (error) {
+              if (signal?.aborted) throw error;
+            }
+          }
+          const movedOutOfTests = origCat === 'test' && destCat !== 'test';
+          const afterMetrics = movedOutOfTests || snap.text === null
+            ? {assertionCount: 0, skipCount: 0}
+            : analyzeTestMetrics(snap.text);
+          let stagedMetrics = null;
+          if (!movedOutOfTests && stagedMap.has(entry.path) && entry.xy[0] !== 'D') {
+            try {
+              const {stdout: stagedText} = await runReadOnlyGit(baseline.gitBin, baseline.canonical, env,
+                ['show', `:0:${entry.path}`], {signal, filterOverrides});
+              stagedMetrics = analyzeTestMetrics(stagedText);
+            } catch (error) {
+              if (signal?.aborted) throw error;
+            }
+          }
+          const skipIncreased = afterMetrics.skipCount > beforeMetrics.skipCount ||
+            (stagedMetrics && beforeStagedMetrics && stagedMetrics.skipCount > beforeStagedMetrics.skipCount);
+          const assertionsReduced =
+            (beforeMetrics.assertionCount > 0 && afterMetrics.assertionCount < beforeMetrics.assertionCount) ||
+            (stagedMetrics && beforeStagedMetrics && beforeStagedMetrics.assertionCount > 0 &&
+              stagedMetrics.assertionCount < beforeStagedMetrics.assertionCount);
+          if (skipIncreased) skipAddedFiles++;
+          if (assertionsReduced) assertionsReducedFiles++;
+        }
+      }
+
+      if (!currentTruncated) {
+        for (const [priorPath, prior] of baseline.entries) {
+          if (signal?.aborted) throw new Error('Cancelled');
+          if (seenPaths.has(priorPath)) continue;
+          const snap = await readWorkspaceFileSnapshot(baseline.canonical, priorPath);
+          if (signal?.aborted) throw new Error('Cancelled');
+          totalChangedFiles++;
+          if (snap.state === 'missing') deletedFiles++;
+          else modifiedFiles++;
+          categories[prior.category]++;
+          if (prior.category === 'test') {
+            modifiedTestFiles++;
+            if (snap.state === 'oversized' || snap.state === 'non-regular' || snap.state === 'protected') {
+              opaqueTest = true;
+              continue;
+            }
+            const beforeMetrics = prior.testMetrics ?? {assertionCount: 0, skipCount: 0};
+            const afterMetrics = snap.text !== null ? analyzeTestMetrics(snap.text) : {assertionCount: 0, skipCount: 0};
+            if (afterMetrics.skipCount > beforeMetrics.skipCount) skipAddedFiles++;
+            if (beforeMetrics.assertionCount > 0 && afterMetrics.assertionCount < beforeMetrics.assertionCount)
+              assertionsReducedFiles++;
+          }
+        }
+      }
+
+      return {
+        coverage: 'baseline-delta',
+        reason: null,
+        baselineDirtyEntries: baseline.baselineDirtyEntries,
+        headMoved: baseline.headRef !== currentHead,
+        truncated: baseline.truncated || currentTruncated || opaqueTest,
+        delta: {
+          totalChangedFiles, addedFiles, modifiedFiles, deletedFiles, categories,
+          testTamper: {modifiedTestFiles, skipAddedFiles, assertionsReducedFiles},
+        },
+      };
+    } catch {
+      if (signal?.aborted) return {
+        coverage: 'skipped-on-cancel',
+        reason: 'CANCELLED_OR_CLOSING',
+        baselineDirtyEntries: baseline.baselineDirtyEntries, headMoved: null, truncated: null, delta: null,
+      };
+      return {
+        coverage: 'git-unavailable',
+        reason: 'GIT_EXEC_FAILED',
+        baselineDirtyEntries: baseline.baselineDirtyEntries, headMoved: null, truncated: null, delta: null,
+      };
+    }
+  }
+
   async function execute(task, attempt = task.attempts?.at(-1) ?? {id:task.id, kind:'initial', instruction:task.goal}) {
     let agent, promptAccepted = false, promptMayHaveBeenAccepted = false, stage = attempt.kind === 'initial' ? 'create' : 'resolve-agent';
     let eventBoundary = -1, releaseReconciliation = null, reconciliationSecurity = null, terminationConfirmed = false;
-    let termination;
+    let termination, gitBaseline = null;
     const controller = new AbortController();
     const running = {controller, agent:null, stopPromise:null, attemptId:attempt.id,
       release() {
@@ -634,6 +1040,10 @@ export async function apply(ctx, config, {streamBoundary, lifecycleBinding, allo
         stage = 'reconcile-evidence';
         evidence = await reconciliationEvidence(ledger.get(task.id), workspace, agent, reconciliationSecurity);
         await ledger.recordReconciliationEvidence(task.id, attempt.id, evidence);
+      } else if (task.policy.toolSet === 'development') {
+        gitBaseline = await captureGitBaseline(workspace.cwd, controller.signal);
+        if (closing || stopIntents.has(task.id) || controller.signal.aborted || ledger.get(task.id).status !== 'running')
+          throw new Error('Task cancellation requested');
       }
 
       stage = 'prompt';
@@ -663,12 +1073,22 @@ export async function apply(ctx, config, {streamBoundary, lifecycleBinding, allo
       const currentEvents = eventsAfter(events, eventBoundary);
       const reason = currentEvents.findLast(event => event.type === 'turn/end')?.data.reason?.kind;
       await ledger.tail;
-      if (evidenceFailures.has(evidenceKey(task.id, attempt.id))) {
-        await persistFinal(task.id, 'unknown', null, 'EVIDENCE_STORAGE_FAILED', 'finalize', 'unconfirmed');
+      if (closing || stopIntents.has(task.id) || controller.signal.aborted)
+        throw new Error('Task cancellation requested');
+      const evidenceFailed = evidenceFailures.has(evidenceKey(task.id, attempt.id));
+      const gitDelta = evidenceFailed ? {coverage:'not-applicable', reason:'EXECUTION_ABORTED'}
+        : reconcile ? {coverage:'not-applicable', reason:'RECONCILE_READ_ONLY'}
+        : task.policy.toolSet !== 'development' ? {coverage:'not-applicable', reason:'NON_DEVELOPMENT_TASK'}
+        : await computeGitDelta(workspace.cwd, gitBaseline, controller.signal);
+      const buildSensor = ({task:targetTask, attempt:targetAttempt, finalStatus, finalArtifact, endedAt}) =>
+        evaluatePolicySensor({task:targetTask, attempt:targetAttempt, status:finalStatus,
+          gitDelta, finalText:finalArtifact, evaluatedAt:endedAt});
+      if (evidenceFailed) {
+        await persistFinal(task.id, 'unknown', null, 'EVIDENCE_STORAGE_FAILED', 'finalize', 'unconfirmed', buildSensor);
       } else {
         const status = reason === 'completed' ? 'completed' : reason === 'aborted' ? 'stopped' : reason ? 'failed' : 'unknown';
         await persistFinal(task.id, status, finalAssistantText(currentEvents), null, null,
-          status === 'stopped' ? 'confirmed' : status === 'unknown' ? 'unconfirmed' : null);
+          status === 'stopped' ? 'confirmed' : status === 'unknown' ? 'unconfirmed' : null, buildSensor);
       }
     } catch (error) {
       const cancellationRequested = closing || stopIntents.has(task.id) || controller.signal.aborted;
@@ -696,9 +1116,17 @@ export async function apply(ctx, config, {streamBoundary, lifecycleBinding, allo
         status = accepted ? 'unknown' : 'failed';
         failureCode = error instanceof PolicyError ? error.code : accepted ? 'EXECUTION_UNCONFIRMED' : 'PREPARATION_FAILED';
       }
+      const gitDelta = {
+        coverage: cancellationRequested ? 'skipped-on-cancel' : 'not-applicable',
+        reason: cancellationRequested ? 'CANCELLED_OR_CLOSING' : 'EXECUTION_ABORTED',
+      };
+      const buildSensor = ({task:targetTask, attempt:targetAttempt, finalStatus, finalArtifact, endedAt}) =>
+        evaluatePolicySensor({task:targetTask, attempt:targetAttempt, status:finalStatus,
+          gitDelta, finalText:finalArtifact, evaluatedAt:endedAt});
       await persistFinal(task.id, status, status === 'completed' ? finalAssistantText(currentEvents) : null,
         failureCode, status === 'completed' ? null : stage,
-        status === 'stopped' ? 'confirmed' : status === 'unknown' ? (stop.confirmed ? 'confirmed' : 'unconfirmed') : null);
+        status === 'stopped' ? 'confirmed' : status === 'unknown' ? (stop.confirmed ? 'confirmed' : 'unconfirmed') : null,
+        buildSensor);
     }
     return {terminationConfirmed, termination};
   }

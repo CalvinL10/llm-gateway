@@ -2,8 +2,6 @@
 
 **中文** | [English](README.en.md)
 
-[下载 v0.2.0](https://github.com/CalvinL10/llm-gateway/releases/tag/v0.2.0)
-
 同一安装包接入不同 DSH Web Home，使用各宿主自己的 Provider、账号、工作区和存储。
 不安装另一套 DSH，不复制 OAuth/订阅目录，不自动启动任务。新入口 `./plugin` 与普通会话共存；
 默认入口 `.` 仍保留专用宿主的严格调用限制，旧部署不会静默变更安全语义。
@@ -11,14 +9,10 @@
 ## 1. 安装
 
 先使用已有兼容 DSH、Node、pnpm。当前范围：Windows、本机 `127.0.0.1`、DSH Web；
-实测 CLI 0.1.5-rc.1 / 服务包 0.1.5-rc.2 的本机兼容运行时，**包含既有本地修改**；
-版本号相同不代表未经修改的上游安装兼容。本 Release 不附带运行时，不承诺任意发行版。
+实测 CLI 0.1.5-rc.1 / 服务包 0.1.5-rc.2 的本机兼容运行时，不承诺任意发行版。
 需要宿主提供 agentPresets 的 discovery roots/serviceFor、sessions、sessionController、
 sessionProjections、workspaceRegistry、storageDomain、原生审批/工具、Web 认证服务。
 缺项按启动错误处理，不通过放宽权限解决。
-
-从上面的 Release 下载 `llm-gateway-dsh-agent-gateway-0.2.0.tgz`（不是 GitHub 自动生成的 Source code 压缩包），
-保存到下面示例的 `F:\packages`，或修改命令中的路径。无需克隆仓库。
 
 ```powershell
 $env:DSH_HOME = 'F:\my-dsh-home'  # 仅当前终端；换 Home 就接入另一实例
@@ -95,8 +89,8 @@ dsh web --host 127.0.0.1 --port 3084 --no-open
 
 移除不清空 Home、任务、偏好或账号。历史网关任务在重新安装兼容插件后可读取；卸载后不打开其网关 preset 会话。
 恢复时安装明确保留的上一个包/版本，恢复原配置，使用同一个 Home；不要复制凭据到新 Home。
-本 Release 使用 DSH 原生命令启动，不需要历史工作台的 `gateway.ps1` 或 release 目录。
-遇到端口冲突时先确认占用者，不能直接终止未知进程。
+已有专用部署可继续用仓库的 `gateway.ps1` 辅助启动，但它不是插件安装/运行的必要入口。
+PID 已退出且端口空闲可安全恢复；进程归属不明、端口冲突或活动租约会明确拒绝，不杀未知进程。
 
 本包不含运行时、测试、实验资料、历史 Home 或凭据。验证用的脚本化模型只证明接入和控制流程，
 不证明真实模型开发能力、收益或费用；真实业务调用须另行明确任务和预算。

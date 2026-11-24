@@ -1,0 +1,28 @@
+# Candidate image for the P06-B zero-model isolation gate.
+# The runtime package declares os=win32 because the production DSH host is Windows;
+# --force is intentional for this Linux container candidate and is recorded in the evidence.
+FROM node:24.15.0-bookworm-slim AS node-runtime
+FROM mcr.microsoft.com/powershell:7.5-debian-12
+
+USER root
+COPY --from=node-runtime /usr/local/bin/node /usr/local/bin/node
+COPY --from=node-runtime /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/npm
+RUN ln -s /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
+ && ln -s /usr/local/lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx \
+ && apt-get update \
+ && apt-get install --no-install-recommends -y ca-certificates git \
+ && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /opt/gateway
+COPY integrations/dsh-agent-gateway/runtime/package.json integrations/dsh-agent-gateway/runtime/package-lock.json ./
+RUN npm ci --force --include=optional --no-audit --no-fund
+# ESM test fixtures copied below /workspace must resolve the locked Linux runtime,
+# not Windows host junctions. This link is inside the read-only image only.
+RUN ln -s /opt/gateway/node_modules /node_modules
+COPY integrations/dsh-agent-gateway/runtime/THIRD_PARTY_LICENSES.csv ./
+
+RUN useradd --create-home --uid 10001 --shell /usr/bin/pwsh gateway \
+ && chown -R gateway:gateway /opt/gateway
+USER gateway
+WORKDIR /workspace
+CMD ["pwsh"]

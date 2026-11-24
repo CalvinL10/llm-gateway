@@ -2,29 +2,40 @@
 
 **中文** | [English](README.en.md)
 
-面向兼容 DSH Web 的任务插件。复用宿主模型、账号、工作区、工具与审批，提供任务页面、根/子模型选择、委派、共享调用额度、取消和显式继续；不限制普通宿主会话。
+面向兼容 **DeepSeek Harness (`dsh`) Web** 的受控多 Agent 任务网关控制面插件：复用宿主模型、账号、工作区、原生工具和审批，提供受保护任务页面、主/子模型调度、树级共享调用额度与取消/重启只读核对；普通 DSH 会话不受限制。`main` 分支源码在此前 `v0.2.0` 基础上已补充 `gateway-otel-trace-v1` 因果血缘树、`gateway-policy-sensor-v1` 事后确定性门禁（`L1/L2/L3`）及任务页传感器状态提示（GitHub [v0.2.0 发布包](docs/releases/v0.2.0.md) 早于该增量，如需最新打包可在 `main` 上执行 `npm pack ./integrations/dsh-agent-gateway`）。
 
-## 安装
+**插件安装与使用**：见 [插件最短说明](integrations/dsh-agent-gateway/README.md) · [v0.2.0 发布说明](docs/releases/v0.2.0.md)。
+**系统架构与演进路线**：见 [系统架构](docs/architecture.md) · [Option A 路线](PLAN.md) · [AI-Native 工程规范](AGENTS.md)。
 
-- **[安装与使用教程](integrations/dsh-agent-gateway/README.md)**
-- **[下载 v0.2.0 插件包](https://github.com/CalvinL10/llm-gateway/releases/tag/v0.2.0)**
-- [v0.2.0 发布说明](docs/releases/v0.2.0.md)
+## 仓库结构
 
-下载 Release 中的 `llm-gateway-dsh-agent-gateway-0.2.0.tgz`，通过 DSH 原生 `plugin --profile web add/remove` 安装和移除。首次安装默认未启用，配置授权工作区和策略后再启用；不会自动选择账号或启动任务。
+| 目录 | 定位 |
+| :--- | :--- |
+| [integrations/dsh-agent-gateway/](integrations/dsh-agent-gateway/README.md) | `@llm-gateway/dsh-agent-gateway` 插件发布核心（根目录 8 个运行模块 + `presets/`） |
+| `integrations/dsh-agent-gateway/ops/` | 本机受管服务生命周期（`lifecycle.mjs`）、停机维护（`maintenance.mjs`）与离线核算（`cost-report.mjs`） |
+| `integrations/dsh-agent-gateway/smoke/` | 零凭据 HTTP/SSE Smoke（`web-smoke.mjs`）与手动审批演练（`approval-manual.mjs`） |
+| `integrations/dsh-agent-gateway/tests/` | 网关核心安全/状态机/可移植性回归测试及 `tests/ops/` 运维测试 |
+| [docs/](docs/architecture.md) | [系统架构](docs/architecture.md)、[运维与验证手册](docs/runbook.md)、[本机日常入口](docs/local-use.md)、[历史实证快照](docs/history-snapshot.md) |
+| [legacy/python-cache-experiment/](legacy/python-cache-experiment/README.md) | 独立归档的 Python FastAPI + Redis Singleflight L1 缓存实验（与 DSH 主线隔离） |
 
-无需克隆仓库、复制整个工作台或历史 Home，也不依赖历史启动脚本。
+## 快速验证
 
-## 源码与安装包
+```powershell
+# 1. 网关核心与运维回归（串行执行）
+$core = Get-ChildItem -LiteralPath integrations/dsh-agent-gateway/tests -Filter '*.test.mjs' | Sort-Object Name | ForEach-Object FullName
+$ops  = Get-ChildItem -LiteralPath integrations/dsh-agent-gateway/tests/ops -Filter '*.test.mjs' | Sort-Object Name | ForEach-Object FullName
+node --test --test-concurrency=1 @core @ops
 
-插件运行源码位于 [integrations/dsh-agent-gateway](integrations/dsh-agent-gateway)。`v0.2.0` 标签保存该版本的发布源码，`main` 包含后续文档更新。
+# 2. 零模型 HTTP/SSE Smoke、文档合同与发版包边界检查
+node integrations/dsh-agent-gateway/smoke/web-smoke.mjs --http
+node --test docs/documentation.test.mjs
+npm pack --dry-run ./integrations/dsh-agent-gateway
+```
 
-GitHub 自动生成的 Source code 压缩包是源码，不是可直接安装的插件包；安装请使用 Release 附件中的 `.tgz`。本次文档语言切换不改变插件运行代码，也不替换已经发布的安装包。
+## 支持范围与诚实边界
 
-## 支持范围
-
-- 当前验收范围为 Windows、本机回环地址和兼容 DSH Web。实测 CLI **0.1.5-rc.1** / 服务包 **0.1.5-rc.2** **含既有本地修改**；相同版本号不保证未经修改的上游安装兼容。
-- 命令执行需要显式配置受支持的隔离执行器；没有不受隔离的宿主 shell 回退。
-- 中断任务重启后为 `unknown`，不会自动重放。
-- 两个独立 Home 的接入、移除和任务控制已用本地可控响应检查；没有调用真实模型或执行真实 Docker 开发命令，不代表完整业务验收或费用收益。
-
-[第三方归属](THIRD_PARTY_NOTICES.md)。仓库中的旧实验材料仅供历史参考，不是当前安装入口。
+- 当前仅验收 **Windows、本机 `127.0.0.1` 回环、兼容 DSH Web 组合**；不声称跨系统或公网多租户生产就绪。
+- 未显式配置受支持的隔离执行器（`executor: docker`）时命令执行禁用，绝不回退到不受隔离的宿主 shell。
+- 进程重启后的活动任务统一收敛为 `unknown`，禁止自动重放，必须由用户显式发起只读核对。
+- P01–P12 历史实证汇总见 [历史快照](docs/history-snapshot.md)（完整原始记录保存在只读 Git Tag `archive/p01-p12-history`）；缺失的 token 用量记为 `unknown/missing`，未宣称稳定降本或提质收益。
+- [第三方归属](THIRD_PARTY_NOTICES.md)。

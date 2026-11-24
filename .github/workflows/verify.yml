@@ -1,0 +1,145 @@
+name: Verify Gateway
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  docs-and-package:
+    name: Docs & Package Boundary
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Run documentation contract tests
+        run: node --test docs/documentation.test.mjs
+
+      - name: Verify exact 22-file package boundary (npm pack --dry-run)
+        run: |
+          $raw = npm pack --json --dry-run ./integrations/dsh-agent-gateway
+          if ($LASTEXITCODE -ne 0) { throw "npm pack --dry-run failed with exit code $LASTEXITCODE" }
+          $packed = @($raw | ConvertFrom-Json)[0]
+          if ($packed.filename -ne 'llm-gateway-dsh-agent-gateway-0.2.0.tgz') {
+            throw "Unexpected tarball filename: $($packed.filename)"
+          }
+          $paths = @($packed.files | ForEach-Object { $_.path })
+          Write-Host "Packed files ($($paths.Count)):"
+          $paths | ForEach-Object { Write-Host "  $_" }
+          $expected = @(
+            'README.en.md',
+            'README.md',
+            'cordis.patch.yml',
+            'docker-executor-spec.mjs',
+            'docker-pwsh-executor.js',
+            'index.js',
+            'ledger.js',
+            'package.json',
+            'panel.js',
+            'plugin.js',
+            'presets/llm-gateway-delegate-docker/agent.cordis.yml',
+            'presets/llm-gateway-delegate-docker/preset.yml',
+            'presets/llm-gateway-delegate/agent.cordis.yml',
+            'presets/llm-gateway-delegate/preset.yml',
+            'presets/llm-gateway-single-docker/agent.cordis.yml',
+            'presets/llm-gateway-single-docker/preset.yml',
+            'presets/llm-gateway-single/agent.cordis.yml',
+            'presets/llm-gateway-single/preset.yml',
+            'presets/llm-gateway-text/agent.cordis.yml',
+            'presets/llm-gateway-text/preset.yml',
+            'report.js',
+            'tools.js'
+          )
+          $diff = @(Compare-Object -ReferenceObject $expected -DifferenceObject $paths -CaseSensitive)
+          if ($diff.Count -gt 0) {
+            $detail = ($diff | ForEach-Object { "$($_.SideIndicator) $($_.InputObject)" }) -join '; '
+            throw "Packed file manifest mismatch: $detail"
+          }
+
+      - name: Check committed diff whitespace and conflict markers
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          $base = if ($env:PR_BASE_SHA) {
+            $env:PR_BASE_SHA
+          } elseif ($env:PUSH_BEFORE_SHA -and $env:PUSH_BEFORE_SHA -notmatch '^0+$') {
+            $env:PUSH_BEFORE_SHA
+          } else {
+            git rev-parse --verify -q 'HEAD~1' 2>$null
+          }
+          if ($base) {
+            git diff --check "$base" HEAD
+          } else {
+            git diff-tree --root --no-commit-id --check HEAD
+          }
+          if ($LASTEXITCODE -ne 0) { throw "git whitespace/conflict check failed with exit code $LASTEXITCODE" }
+
+  gateway-regression:
+    name: Gateway Regression & Zero-Model Smoke
+    runs-on: windows-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Print environment diagnostics
+        run: |
+          Write-Host "node: $(node -v)"
+          Write-Host "npm: $(npm -v)"
+          Write-Host "pnpm: $(pnpm -v)"
+          Write-Host "git: $(git --version)"
+          $edgePath = 'C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe'
+          Write-Host "msedge present ($edgePath): $(Test-Path -LiteralPath $edgePath)"
+
+      - name: Install locked DSH runtime dependencies
+        run: |
+          $runtime = Join-Path $PWD 'integrations/dsh-agent-gateway/runtime'
+          npm ci --prefix $runtime --no-audit --no-fund
+          if ($LASTEXITCODE -ne 0) { throw "Runtime npm ci failed with exit code $LASTEXITCODE" }
+
+      - name: Run serialized core and ops regression tests
+        run: |
+          $core = Get-ChildItem -LiteralPath integrations/dsh-agent-gateway/tests -Filter '*.test.mjs' | Sort-Object Name | ForEach-Object FullName
+          $ops  = Get-ChildItem -LiteralPath integrations/dsh-agent-gateway/tests/ops -Filter '*.test.mjs' | Sort-Object Name | ForEach-Object FullName
+          node --test --test-concurrency=1 @core @ops
+          if ($LASTEXITCODE -ne 0) { throw "Node regression suite failed with exit code $LASTEXITCODE" }
+
+      - name: Run zero-model HTTP/SSE smoke test
+        run: |
+          $out = node integrations/dsh-agent-gateway/smoke/web-smoke.mjs --runtime integrations/dsh-agent-gateway/runtime --http
+          $out
+          if ($LASTEXITCODE -ne 0) { throw "Zero-model smoke failed with exit code $LASTEXITCODE" }
+          $text = ($out | Out-String)
+          if ($text -notmatch 'AGENT_GATEWAY_PASS' -or $text -notmatch '"realModelCalls":\s*0') {
+            throw 'Zero-model smoke output missing AGENT_GATEWAY_PASS or realModelCalls:0'
+          }

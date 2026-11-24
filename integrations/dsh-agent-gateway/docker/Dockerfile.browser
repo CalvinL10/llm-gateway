@@ -1,0 +1,9 @@
+# Build from a minimal context containing only this file and the two platform browser modules.
+# Opt-in browser resource profile; the ordinary shell image and its limits remain unchanged.
+FROM llm-gateway-pwsh:node24-pwsh7.5
+USER root
+RUN apt-get update \
+ && apt-get install --no-install-recommends -y firefox-esr \
+ && rm -rf /var/lib/apt/lists/*
+COPY firefox-runtime.mjs firefox-runtime-smoke.mjs /opt/gateway/
+USER gateway

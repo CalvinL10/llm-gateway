@@ -1,0 +1,280 @@
+{
+  "historyCommit": "dbaafb58e0e90640b6ce68fdd2fba56cab8becfa",
+  "finalCompletion": {
+    "observedAt": "2026-09-20T04:12:38.683Z",
+    "scope": "P06-B finite batch; platform-assisted repair, not first-pass autonomous success",
+    "totalCalls": 184,
+    "firstPassAccepted": 0,
+    "repairAccepted": 3,
+    "unfinished": 0,
+    "latestWindow": {
+      "historicalTotal": 178,
+      "additionalLimit": 8,
+      "used": 6,
+      "totalCeiling": 186,
+      "taskCeiling": 96,
+      "minutes": 20,
+      "continuationId": "44a159f8-47a2-4b7d-a5ec-5b7ad088a7e4"
+    },
+    "tasks": [
+      {
+        "label": "T1",
+        "id": "53e9bffd-d124-4885-9077-26b152f639e5",
+        "status": "completed",
+        "calls": 38,
+        "rootCalls": 38,
+        "childCalls": 0,
+        "approvalCount": 0,
+        "commit": "2f967ba",
+        "acceptedAfterRepair": true,
+        "productChecks": {
+          "tests": 48,
+          "pass": 48,
+          "fail": 0,
+          "skip": 0
+        }
+      },
+      {
+        "label": "T2",
+        "id": "a93ab46d-a6e8-47dd-a25c-818a756c6f0a",
+        "status": "completed",
+        "calls": 94,
+        "rootCalls": 94,
+        "childCalls": 0,
+        "approvalCount": 0,
+        "commit": "8458923",
+        "acceptedAfterRepair": true,
+        "productChecks": {
+          "tests": 47,
+          "pass": 47,
+          "fail": 0,
+          "skip": 0
+        }
+      },
+      {
+        "label": "T3",
+        "id": "d4b9d63e-f580-4b8f-9903-f3f4f88c0fb7",
+        "status": "completed",
+        "calls": 52,
+        "rootCalls": 52,
+        "childCalls": 0,
+        "approvalCount": 0,
+        "commit": "88afd6f",
+        "acceptedAfterRepair": true,
+        "productChecks": {
+          "tests": 11,
+          "pass": 11,
+          "fail": 0,
+          "skip": 0,
+          "httpSse": "PASS",
+          "separateStableSseBugProven": false
+        }
+      }
+    ],
+    "t2ProductAcceptance": {
+      "actor": "product-agent",
+      "turn": 10,
+      "commandSeq": 664,
+      "resultSeq": 665,
+      "command": "node --test --test-concurrency=1 integrations/dsh-agent-gateway/report.test.mjs integrations/dsh-agent-gateway/offline.test.mjs integrations/dsh-agent-gateway/development.test.mjs integrations/dsh-agent-gateway/browser-ui.test.mjs",
+      "output": "{\"result\":\"GATEWAY_BROWSER_UI_PASS\",\"browser\":\"Firefox ESR\",\"scriptedModel\":true,\"sustainedDisconnectRecovered\":true,\"conflictPreserved\":true,\"doubleClickSingleFlight\":true,\"refreshNoReplay\":true,\"reloginRecovered\":true,\"nativeSessionOpened\":true,\"emptyResult\":true,\"partialEvidence\":true,\"fileAndCommandResultsOpened\":true,\"cancelled\":true,\"pendingApprovalOpened\":true,\"cancelDidNotApprove\":true,\"crossWorkspaceWriteDenied\":true,\"realModelCalls\":0,\"tasks\":7}\n✔ real browser completes daily task entry recovery, refresh, relogin, empty, partial and cancel flows (38335.212322ms)\n✔ invalid development preset fails at create without a model call or raw error disclosure (7009.926607ms)\n▶ development preset on the native host (zero real models)\n  ✔ authentication, Origin/Host, and input protections still apply (76.456222ms)\n  ✔ execution prompt supports direct work, focused child research, and targeted repair (864.206504ms)\n  ✔ native development mount advertises only the authorized root tools (119.351457ms)\n  ✔ native file operations, workspace fence, observation policy and child read-only delegation (468.032714ms)\n  ✔ unsafe native pwsh is denied while scoped read and edit remain available (182.477006ms)\n  ✔ cross-workspace escalation is denied without ever requesting or fabricating an approval (132.910081ms)\n  ✔ budget terminal reports use native results, not intermediate assistant claims (1078.197385ms)\n  ✔ same-session continuation preserves interval edits and single-flights duplicate requests (193.773043ms)\n  ✔ exhausted budgets require an authorized visible increment without resetting consumption (262.685645ms)\n  ✔ lost continuation response and cancellation recovery do not replay or inherit the old turn (1403.014716ms)\n  ✔ restart unknown requires read-only reconciliation and restores only gateway-owned narrowing (5865.699324ms)\n  ✔ denied command cannot be reported as an executed nonzero exit or model success (146.43141ms)\n✔ development preset on the native host (zero real models) (16777.654814ms)\n✔ development scratch prefers runtime, falls back only on EROFS, and preserves dependency ancestry (7.208761ms)\n✔ ensureGrantableWorkspace verifies and establishes Windows ACL standing grant idempotently (70.671397ms)\n✔ concurrent descendants share one durable admission limit; failed calls are not refunded (3.671353ms)\n✔ effective dispatch route is checked even when a child inherits or omits model selection (0.387152ms)\n✔ cancel closes admissions; restart marks active work unknown without recreating it (1.456904ms)\n✔ same request ID is idempotent, conflicting input fails; task policy is detached (1.170524ms)\n✔ an explicit per-task call limit is immutable while omitted retries preserve historical policy (0.45307ms)\n✔ failed persistence cannot issue an admission receipt (0.445846ms)\n✔ explicit child routes and reasoning are enforced at dispatch without changing legacy policies (0.589635ms)\n✔ host lineage includes grandchildren and isolates unrelated tasks; cycles fail closed (0.271969ms)\n✔ development tool set is root-write and child-read-only by construction (0.512576ms)\n✔ dynamic tool guard does not disable sandbox/approval checks (0.791889ms)\n✔ development scope narrows child sandbox and capabilities without changing root approval (0.830975ms)\n✔ continuation admission is durable, idempotent and rejects conflicting or concurrent turns (0.743385ms)\n✔ repeated cancellation records one attempt outcome without creating a new turn (0.431849ms)\n✔ confirmed cancellation remains attached to the active attempt (0.293981ms)\n✔ read-only delegation retains its native tools, while only an active reconciliation denies delegation (0.271437ms)\n✔ continuation budget extends the cumulative limit without resetting calls or refunding failures (0.872846ms)\n✔ restart unknown must be reconciled read-only before another execution continuation (0.966975ms)\n✔ failed reconciliation preserves unknown and cannot unlock a write continuation (0.411143ms)\n✔ budget without effects, with edit and unfinished check, or tool failure never means completed (7.906502ms)\n✔ normal completion at exactly eight calls is not a limit stop or business acceptance (0.657297ms)\n✔ cancel and restart unknown take precedence over budget denial; evidence and idempotency survive (2.734813ms)\n✔ safe projections use linked result facts only; no arbitrary error, arguments, meta or content escapes (0.359238ms)\n✔ public task projection redacts attempt instructions while retaining audit metadata (0.368646ms)\n✔ recovered historical attempt usage stays bounded when reconciliation adds calls (1.045081ms)\n✔ approval audit projection is one-shot, linked and excludes reasons, arguments and request ids (0.595237ms)\n✔ allowed-once approval remains scoped to its attempt and is never evidence for a continuation action (0.71076ms)\n✔ only final text of completed turn is an artifact; legacy partial records remain visibly unverified (0.505943ms)\n✔ daily task entry preserves identity, single-flights double submit and separates turn completion from acceptance (7.31901ms)\n✔ continuation UI single-flights, recovers a lost response by attempt id and exposes cumulative evidence (3.409284ms)\n✔ pending initial request recovery compares the immutable initial budget after continuation increments (2.453202ms)\nℹ tests 47\nℹ suites 0\nℹ pass 47\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 62775.310318\n"
+    },
+    "t2Independent": {
+      "actor": "construction-assistant",
+      "exactSourceFilesCompared": 33,
+      "docker": {
+        "pass": 47,
+        "fail": 0,
+        "skip": 0,
+        "oomKill": 0
+      },
+      "windows": {
+        "pass": 47,
+        "fail": 0,
+        "skip": 0
+      },
+      "outputs": [
+        "docs/evidence/p06-b/p06-t2-final-exact-docker.txt",
+        "docs/evidence/p06-b/p06-t2-final-exact-windows.txt"
+      ]
+    },
+    "platform": {
+      "commit": "907aed5",
+      "failures": [
+        "Firefox navigator.onLine=false in loopback-only namespace",
+        "512MiB caused about:tabcrashed and cgroup oom_kill=1",
+        "locale-sensitive selector needed explicit zh-CN"
+      ],
+      "fixes": [
+        "disable automatic offline link detection; retain network=none",
+        "opt-in browser profile 256 PID/1GiB/1CPU; standard unchanged",
+        "explicit browser locale without security preference overrides"
+      ],
+      "unitAndDeployment": {
+        "pass": 21,
+        "fail": 0,
+        "skip": 0
+      },
+      "lifecycleAndRuntime": {
+        "pass": 9,
+        "fail": 0,
+        "skip": 0
+      },
+      "smoke": "PASS; loopback-only, sandbox6/Fission/seccomp, online across reload, local SSE, locale, oom0"
+    },
+    "service": {
+      "pid": 29344,
+      "port": 3084,
+      "running": true,
+      "identity": true,
+      "ownsPort": true,
+      "restoredProfile": "standard",
+      "defaultPids": 128,
+      "defaultMemoryMiB": 512,
+      "noActiveTasks": true,
+      "noPendingApprovals": true
+    },
+    "mainRegression": {
+      "actor": "construction-assistant",
+      "command": "node --test --test-concurrency=1 integrations/dsh-agent-gateway/*.test.mjs",
+      "before": {
+        "pass": 122,
+        "fail": 1,
+        "skip": 1,
+        "output": "git:dbaafb58e0e90640b6ce68fdd2fba56cab8becfa:docs/evidence/p06-b/p06-final-main-regression.txt"
+      },
+      "repair": "Browser fixture startup omitted --expose-internals used by the managed runtime and accepted T2; align both startup commands without changing business code or assertions.",
+      "after": {
+        "tests": 124,
+        "pass": 123,
+        "fail": 0,
+        "skip": 1,
+        "output": "git:dbaafb58e0e90640b6ce68fdd2fba56cab8becfa:docs/evidence/p06-b/p06-final-main-regression-fixed.txt"
+      },
+      "skipReason": "same-workspace native ACL before/after regression requires explicitly configured original GATEWAY_PIPE_TEST_WORKSPACE; absent, not replaced with a temporary fixture and not counted as passed",
+      "focusedBrowser": {
+        "pass": 1,
+        "fail": 0,
+        "skip": 0,
+        "output": "git:dbaafb58e0e90640b6ce68fdd2fba56cab8becfa:docs/evidence/p06-b/p06-final-main-browser-fixed.txt"
+      },
+      "documentation": {
+        "pass": 11,
+        "fail": 0,
+        "skip": 0
+      }
+    },
+    "assistantIntervention": {
+      "platformRepairs": true,
+      "businessCodeEdits": 0,
+      "independentCopyDiagnostics": true,
+      "targetedInstructionsToProduct": true,
+      "commitsCreated": true,
+      "manualMinutes": "unknown",
+      "externalBilling": "unknown"
+    },
+    "publication": "No push, merge or business-branch deployment"
+  },
+  "postCompletionAudit": {
+    "auditedAt": "2026-09-20T04:48:28Z",
+    "actor": "construction-assistant",
+    "verdict": "P06-B repair acceptance 3/3 is supported, but the prior closeout was not unconditionally complete",
+    "historicalAcceptanceUnchanged": {
+      "totalCalls": 184,
+      "initialSuccess": 0,
+      "acceptedAfterRepair": 3,
+      "realModelCallsThisAudit": 0
+    },
+    "repairs": [
+      "register development scratch cleanup immediately after creation so setup failures cannot leak",
+      "remove scratch in finally even when host shutdown fails",
+      "add an ordinary cleanup regression test",
+      "label the 72-call 0/3 P06-A result as a historical snapshot",
+      "persist final raw logs under docs/evidence/p06-b"
+    ],
+    "t2TestInfrastructureCommit": "3330287",
+    "firstAuditFailure": {
+      "tests": 36,
+      "pass": 34,
+      "fail": 2,
+      "cause": "audit command used the T2 worktree fallback runtime, which has no installed DSH dependencies",
+      "fixtureCountBefore": 10,
+      "fixtureCountAfter": 12,
+      "output": "git:dbaafb58e0e90640b6ce68fdd2fba56cab8becfa:docs/evidence/p06-b/p06-b-post-audit-t2-first-failure.txt"
+    },
+    "setupFailureCleanupRetest": {
+      "expectedExit": 1,
+      "fixtureCountBefore": 12,
+      "fixtureCountAfter": 12,
+      "output": "git:dbaafb58e0e90640b6ce68fdd2fba56cab8becfa:docs/evidence/p06-b/p06-b-post-audit-t2-setup-cleanup.txt"
+    },
+    "t2FinalRetest": {
+      "tests": 48,
+      "pass": 48,
+      "fail": 0,
+      "skip": 0,
+      "realModelCalls": 0,
+      "output": "docs/evidence/p06-b/p06-b-post-audit-t2-final.txt"
+    },
+    "fixtureCleanup": {
+      "mainRuntime": 182,
+      "t2Worktree": 12,
+      "removedTotal": 194,
+      "remaining": 0,
+      "preservedUserDirectory": "integrations/dsh-agent-gateway/runtime/delegation-test-3c1G9m/",
+      "output": "git:dbaafb58e0e90640b6ce68fdd2fba56cab8becfa:docs/evidence/p06-b/p06-b-post-audit-fixture-cleanup.txt"
+    },
+    "remainingLimitations": [
+      "same-workspace native ACL regression remains skipped without an explicit existing GATEWAY_PIPE_TEST_WORKSPACE",
+      "manual intervention minutes remain unknown",
+      "external billing remains unknown"
+    ],
+    "mainRegression": {
+      "actor": "construction-assistant",
+      "command": "node --test --test-concurrency=1 integrations/dsh-agent-gateway/*.test.mjs docs/documentation.test.mjs",
+      "first": {
+        "tests": 136,
+        "pass": 134,
+        "fail": 1,
+        "skip": 1,
+        "cause": "documentation link target for the audit output was created by the same pipeline only after the link checker ran",
+        "output": "git:dbaafb58e0e90640b6ce68fdd2fba56cab8becfa:docs/evidence/p06-b/p06-b-post-audit-main-tests-first-failure.txt"
+      },
+      "final": {
+        "tests": 136,
+        "pass": 135,
+        "fail": 0,
+        "skip": 1,
+        "fixtureCountBefore": 0,
+        "fixtureCountAfter": 0,
+        "output": "docs/evidence/p06-b/p06-b-post-audit-main-tests.txt",
+        "cleanupOutput": "git:dbaafb58e0e90640b6ce68fdd2fba56cab8becfa:docs/evidence/p06-b/p06-b-post-audit-main-cleanup-count.txt"
+      },
+      "skipReason": "same-workspace native ACL before/after regression requires an explicit existing GATEWAY_PIPE_TEST_WORKSPACE"
+    }
+  },
+  "workspaceConsolidation": {
+    "observedAt": "2026-09-20T05:31:14.841395+00:00",
+    "actor": "construction-assistant",
+    "realModelCalls": 0,
+    "businessCodeEdits": 0,
+    "approvalClicks": 0,
+    "removedInstallationDirectories": 6,
+    "recoveryArchive": ".local/history/p02a-source-recovery.zip",
+    "sourceFilesPreserved": 20,
+    "archiveBytes": 213415,
+    "byteEqualityVerifiedBeforeRemoval": true,
+    "retiredTrackedEvidenceFiles": 24,
+    "removedByteIdenticalLocalLogs": 5,
+    "removedDockerTag": "llm-gateway-pwsh:node24-pwsh7.5-firefox",
+    "preservedDockerTags": [
+      "llm-gateway-pwsh:node24-pwsh7.5",
+      "llm-gateway-pwsh:node24-pwsh7.5-firefox140"
+    ],
+    "preservedBusinessWorktrees": 3,
+    "serviceConfigurationChanged": false,
+    "dependenciesChanged": false,
+    "scope": "Current conclusions and recoverable installation artifacts only; no broad deletion of private .local runtime or user data",
+    "verificationOutput": "docs/evidence/p06-b/workspace-cleanup-checks.txt"
+  }
+}

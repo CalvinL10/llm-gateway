@@ -1,0 +1,204 @@
+{
+  "format": "gateway-agent-audit-v1",
+  "usageSemantics": {
+    "schema": "dsh-provider-neutral-token-usage",
+    "inputTokens": "uncached input only",
+    "cacheTokens": "cacheReadTokens and cacheWriteTokens are disjoint from inputTokens",
+    "totalTokens": "full-call provider aggregate when present; never add cache or reasoning fields to it",
+    "reasoningTokens": "detail counter whose inclusion in outputTokens/totalTokens is adapter-specific unless separately evidenced",
+    "missing": "unknown, not zero"
+  },
+  "tasks": [
+    {
+      "id": "70000000-0000-4000-8000-000000000001",
+      "sessionId": "gateway-agent-70000000-0000-4000-8000-000000000001",
+      "workspaceId": "default",
+      "status": "failed",
+      "createdAt": "2026-09-20T06:27:18.172Z",
+      "endedAt": "2026-09-20T06:27:18.174Z",
+      "failureCode": "FIXTURE_FAILURE",
+      "failureStage": "fixture",
+      "lifecycle": {
+        "state": "ended",
+        "localOutcome": "failed",
+        "persistence": "confirmed",
+        "stopConfirmation": null
+      },
+      "attempts": [
+        {
+          "id": "70000000-0000-4000-8000-000000000001",
+          "kind": "initial",
+          "status": "failed",
+          "startedAt": "2026-09-20T06:27:18.172Z",
+          "endedAt": "2026-09-20T06:27:18.174Z",
+          "callStart": 0,
+          "callEnd": 3,
+          "failureCode": "FIXTURE_FAILURE",
+          "failureStage": "fixture"
+        }
+      ],
+      "calls": [
+        {
+          "id": "dac500c5-bd8a-4307-a052-b50397fd08e7",
+          "measurementKind": "llm-stream-admission",
+          "attemptId": "70000000-0000-4000-8000-000000000001",
+          "sessionId": "gateway-agent-70000000-0000-4000-8000-000000000001",
+          "parentSessionId": null,
+          "source": {
+            "kind": "root",
+            "sessionRole": "root",
+            "purpose": null
+          },
+          "logicalRoute": {
+            "provider": "fixture-lead",
+            "model": "planner",
+            "reasoningEffort": "high"
+          },
+          "admittedAt": "2026-09-20T06:27:18.173Z",
+          "adapterBoundaryPreparedAt": "2026-09-20T01:00:00.000Z",
+          "adapterBoundaryBasis": "durable-preparation-immediately-before-next-invocation",
+          "firstResponseAt": "2026-09-20T01:00:01.000Z",
+          "firstResponseBasis": "first-adapter-chunk",
+          "endedAt": "2026-09-20T01:00:03.000Z",
+          "outcome": "stop",
+          "httpAttempts": {
+            "observability": "unavailable",
+            "count": null,
+            "basis": "no-host-transport-event"
+          },
+          "usageStatus": "final",
+          "usageFirstObservedAt": "2026-09-20T01:00:02.000Z",
+          "usageObservedAt": "2026-09-20T01:00:02.000Z",
+          "usageObservationCount": 1,
+          "usage": {
+            "inputTokens": 80,
+            "outputTokens": 20,
+            "totalTokens": 120,
+            "cacheReadTokens": 20,
+            "reasoningTokens": 5
+          }
+        },
+        {
+          "id": "456ce8d6-38fb-4d83-b763-e7fd238e0159",
+          "measurementKind": "llm-stream-admission",
+          "attemptId": "70000000-0000-4000-8000-000000000001",
+          "sessionId": "fixture-child",
+          "parentSessionId": "gateway-agent-70000000-0000-4000-8000-000000000001",
+          "source": {
+            "kind": "child",
+            "sessionRole": "child",
+            "purpose": null
+          },
+          "logicalRoute": {
+            "provider": "fixture-deep",
+            "model": "worker",
+            "reasoningEffort": "medium"
+          },
+          "admittedAt": "2026-09-20T06:27:18.173Z",
+          "adapterBoundaryPreparedAt": "2026-09-20T01:01:00.000Z",
+          "adapterBoundaryBasis": "durable-preparation-immediately-before-next-invocation",
+          "firstResponseAt": "2026-09-20T01:01:01.000Z",
+          "firstResponseBasis": "first-adapter-chunk",
+          "endedAt": "2026-09-20T01:01:03.000Z",
+          "outcome": "error",
+          "httpAttempts": {
+            "observability": "unavailable",
+            "count": null,
+            "basis": "no-host-transport-event"
+          },
+          "usageStatus": "partial",
+          "usageFirstObservedAt": "2026-09-20T01:01:02.000Z",
+          "usageObservedAt": "2026-09-20T01:01:02.000Z",
+          "usageObservationCount": 1,
+          "usage": {
+            "inputTokens": 30,
+            "outputTokens": 4
+          }
+        },
+        {
+          "id": "2d961b70-ac3c-4546-9b36-83d605eb42b1",
+          "measurementKind": "llm-stream-admission",
+          "attemptId": "70000000-0000-4000-8000-000000000001",
+          "sessionId": "gateway-agent-70000000-0000-4000-8000-000000000001",
+          "parentSessionId": null,
+          "source": {
+            "kind": "auxiliary",
+            "sessionRole": "root",
+            "purpose": "review"
+          },
+          "logicalRoute": {
+            "provider": "fixture-lead",
+            "model": "planner",
+            "reasoningEffort": "high"
+          },
+          "admittedAt": "2026-09-20T06:27:18.174Z",
+          "adapterBoundaryPreparedAt": "2026-09-20T01:02:00.000Z",
+          "adapterBoundaryBasis": "durable-preparation-immediately-before-next-invocation",
+          "firstResponseAt": null,
+          "firstResponseBasis": "first-adapter-chunk",
+          "endedAt": "2026-09-20T01:02:03.000Z",
+          "outcome": "aborted",
+          "httpAttempts": {
+            "observability": "unavailable",
+            "count": null,
+            "basis": "no-host-transport-event"
+          },
+          "usageStatus": "missing",
+          "usageFirstObservedAt": null,
+          "usageObservedAt": null,
+          "usageObservationCount": 0,
+          "usage": null
+        }
+      ],
+      "denials": [],
+      "tools": [
+        {
+          "sessionId": "gateway-agent-70000000-0000-4000-8000-000000000001",
+          "seq": 10,
+          "name": "read",
+          "attemptId": "70000000-0000-4000-8000-000000000001",
+          "outcome": "succeeded",
+          "turn": 1,
+          "step": 1,
+          "startedAt": "2026-09-20T01:00:01.500Z",
+          "endedAt": "2026-09-20T01:00:01.750Z",
+          "resultSeq": 11
+        }
+      ],
+      "approvals": []
+    },
+    {
+      "id": "70000000-0000-4000-8000-000000000002",
+      "sessionId": "gateway-agent-70000000-0000-4000-8000-000000000002",
+      "workspaceId": "default",
+      "status": "running",
+      "createdAt": "2026-09-20T06:27:18.173Z",
+      "endedAt": null,
+      "failureCode": null,
+      "failureStage": null,
+      "lifecycle": {
+        "state": "executing",
+        "localOutcome": null,
+        "persistence": "confirmed",
+        "stopConfirmation": null
+      },
+      "attempts": [
+        {
+          "id": "70000000-0000-4000-8000-000000000002",
+          "kind": "initial",
+          "status": "running",
+          "startedAt": "2026-09-20T06:27:18.173Z",
+          "endedAt": null,
+          "callStart": 0,
+          "callEnd": null,
+          "failureCode": null,
+          "failureStage": null
+        }
+      ],
+      "calls": [],
+      "denials": [],
+      "tools": [],
+      "approvals": []
+    }
+  ]
+}

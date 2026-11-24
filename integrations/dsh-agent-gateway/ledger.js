@@ -289,7 +289,7 @@ export class TaskLedger {
       else task.approvalOperations.push(value);
     });
   }
-  finish(id, status, artifact, failureCode = null, failureStage = null) {
+  finish(id, status, artifact, failureCode = null, failureStage = null, policySensor = null) {
     return this.edit(id, 'finish', task => {
       const attempt = currentAttempt(task);
       const limitDenied = task.denials.some(denial => denial.code === 'TASK_CALL_LIMIT' &&
@@ -306,6 +306,12 @@ export class TaskLedger {
       if (attempt) {
         attempt.status = finalStatus; attempt.artifact = task.artifact; attempt.endedAt = task.endedAt;
         attempt.callEnd = task.calls.length; attempt.failureCode = failureCode; attempt.failureStage = failureStage;
+        if (policySensor !== null && policySensor !== undefined) {
+          const resolvedSensor = typeof policySensor === 'function'
+            ? policySensor({task, attempt, finalStatus, finalArtifact: task.artifact, endedAt: task.endedAt})
+            : policySensor;
+          if (resolvedSensor) attempt.policySensor = structuredClone(resolvedSensor);
+        }
       }
     });
   }

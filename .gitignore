@@ -55,6 +55,5 @@ Thumbs.db
 .pnpm-store/
 **/__pycache__/
 
-# Host dependencies are not release source
+# Node package installs (manifests and locks stay tracked)
 **/node_modules/
-integrations/dsh-agent-gateway/runtime/

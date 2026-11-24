@@ -1,3 +1,0 @@
-# Disable only the optional model title provider; retain deterministic titles.
-- id: session-title-llm
-  disabled: true
