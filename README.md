@@ -2,9 +2,9 @@
 
 **中文** | [English](README.en.md)
 
-面向兼容 **DeepSeek Harness (`dsh`) Web** 的受控多 Agent 任务网关控制面插件：复用宿主模型、账号、工作区、原生工具和审批，提供受保护任务页面、主/子模型调度、树级共享调用额度与取消/重启只读核对；普通 DSH 会话不受限制。`main` 分支源码在此前 `v0.2.0` 基础上已补充 `gateway-otel-trace-v1` 因果血缘树、`gateway-policy-sensor-v1` 事后确定性门禁（`L1/L2/L3`）及任务页传感器状态提示（GitHub [v0.2.0 发布包](docs/releases/v0.2.0.md) 早于该增量，如需最新打包可在 `main` 上执行 `npm pack ./integrations/dsh-agent-gateway`）。
+面向兼容 **DeepSeek Harness (`dsh`) Web** 的受控多 Agent 任务网关控制面插件：复用宿主模型、账号、工作区、原生工具和审批，提供受保护任务页面、主/子模型调度、树级共享调用与 Token 额度、只读 Prefix-Cache 观测、取消/重启只读核对、`gateway-otel-trace-v1` 因果血缘树及确定性 `gateway-policy-sensor-v1`（`L1/L2/L3`）门禁；普通 DSH 会话不受限制。当前 [v0.2.1 发布包](docs/releases/v0.2.1.md) 与 `main` 分支保持同步。
 
-**插件安装与使用**：见 [插件最短说明](integrations/dsh-agent-gateway/README.md) · [v0.2.0 发布说明](docs/releases/v0.2.0.md)。
+**插件安装与使用**：见 [插件最短说明](integrations/dsh-agent-gateway/README.md) · [v0.2.1 发布说明](docs/releases/v0.2.1.md)。
 **系统架构与演进路线**：见 [系统架构](docs/architecture.md) · [Option A 路线](PLAN.md) · [AI-Native 工程规范](AGENTS.md)。
 
 ## 仓库结构

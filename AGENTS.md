@@ -8,7 +8,7 @@
 
 ## 架构不变量与安全红线
 - **Persist-before-Admit**：`TaskLedger.create` / `admit` / `prepareCallAdapterBoundary` 必须先成功落盘才允许调用 `next()`；任何持久化 `await` 之后和调用适配器前必须再次检查 `stopIntents` 与 `options.signal`。
-- **树级配额不可绕过**：按宿主 `origin: subagent` / `parentSession` 逐级归根计入同一共享 `maxCalls` 熔断器（`TASK_CALL_LIMIT`），失败与取消的准入绝不退款。
+- **树级配额不可绕过**：按宿主 `origin: subagent` / `parentSession` 逐级归根计入同一共享 `maxCalls`（`TASK_CALL_LIMIT`）及可选 `maxTotalTokens`（`TASK_TOKEN_LIMIT`）熔断器，失败与取消的准入绝不退款。
 - **故障收敛与禁自动重放**：重启将 `queued` / `running` / `cancel-requested` 收敛为 `unknown`，只能走只读 `kind: reconcile`（禁止编辑文件、执行命令、沿用旧审批或重放副作用）。
 - **边界 Fail-Closed**：保持 `127.0.0.1` 回环、Origin/Host 校验、Win32 路径/硬链接/敏感文件拒绝；未显式配置支持 Docker 隔离执行器时命令执行禁用，严禁回退宿主 shell。
 - **账目诚实原则**：缺失的 token `usage` 保持 `missing` / `unknown`，严禁补 `0`；不得把调用次数限制或本地停止伪称美元预算或远端停止。

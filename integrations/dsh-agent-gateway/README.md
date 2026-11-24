@@ -14,9 +14,11 @@
 sessionProjections、workspaceRegistry、storageDomain、原生审批/工具、Web 认证服务。
 缺项按启动错误处理，不通过放宽权限解决。
 
+[安装教程](README.md) · [下载 v0.2.1](https://github.com/CalvinL10/llm-gateway/releases/tag/v0.2.1)
+
 ```powershell
 $env:DSH_HOME = 'F:\my-dsh-home'  # 仅当前终端；换 Home 就接入另一实例
-dsh plugin --profile web add F:\packages\llm-gateway-dsh-agent-gateway-0.2.0.tgz --config.auto-install-peers=false
+dsh plugin --profile web add F:\packages\llm-gateway-dsh-agent-gateway-0.2.1.tgz --config.auto-install-peers=false
 ```
 
 bundle 默认添加 **disabled** 的 `gateway-agent-tasks` 条目。不会选账号、授权目录或调用模型。

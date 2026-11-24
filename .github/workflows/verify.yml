@@ -36,7 +36,7 @@ jobs:
           $raw = npm pack --json --dry-run ./integrations/dsh-agent-gateway
           if ($LASTEXITCODE -ne 0) { throw "npm pack --dry-run failed with exit code $LASTEXITCODE" }
           $packed = @($raw | ConvertFrom-Json)[0]
-          if ($packed.filename -ne 'llm-gateway-dsh-agent-gateway-0.2.0.tgz') {
+          if ($packed.filename -ne 'llm-gateway-dsh-agent-gateway-0.2.1.tgz') {
             throw "Unexpected tarball filename: $($packed.filename)"
           }
           $paths = @($packed.files | ForEach-Object { $_.path })

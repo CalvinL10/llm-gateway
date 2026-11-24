@@ -12,9 +12,9 @@
   - **动作**：于 `120bdeb` 冻结 `archive/p01-p12-history` 只读归档标签；清理 `.tmp-p11-index.patch`、残留 `runtime/delegation-test-3c1G9m/`、P01–P12 原始实验海与废弃原型；将 Python 缓存实验迁入 `legacy/python-cache-experiment/`；重组 `ops/`、`smoke/`、`tests/`、`tests/ops/` 并保持发版核心零路径破坏；落盘 `AGENTS.md`（≤80 行）、`.agents/skills/gateway-verify/`、`docs/architecture.md`、`docs/history-snapshot.md` 与轻量 `docs/documentation.test.mjs`。
   - **验收**：全部 Node 核心/运维测试通过、`web-smoke.mjs --http` 通过、`npm pack --dry-run` 仅包含 21 个发版文件、独立 Python `pytest` + `ruff` 全绿、`git diff --check` 无告警。
 
-- [ ] **Slice 1：在线 Token/等价成本硬治理 + Prompt Prefix-Cache 观测**
-  - **动作**：在 `TaskLedger` 与 `llm/stream` 拦截链引入在线累计 Token / 等价美元软告警与硬熔断（不仅限于 `maxCalls` 次数）；基于 `cacheReadTokens / (inputTokens + cacheReadTokens)` 在 `report.js` 追踪 Prefix-Cache 命中率与跨轮前缀击穿告警；探索受控模型路由降级策略。
-  - **为什么先做它**：`cost-report.mjs` 目前仅事后算账，无法在任务执行中拦截 Token 爆炸与 KV-Cache 击穿。
+- [x] **Slice 1-Lite：在线 Token 预算硬治理 + 只读 Prefix-Cache 观测**
+  - **动作**：在 `TaskLedger` 与 `index.js` 引入可选树级 `maxTotalTokens`、`tokenWarningRatio` 软告警及授权续行 `additionalTotalTokens`（触发 `TASK_TOKEN_LIMIT` 硬熔断，失败与部分用量计入总额不退款，缺失用量维持 `missing` 绝不补 `0`）；在 `report.js`（`gateway-prefix-cache-v1`）与 `auditExport` 追踪 `cacheReadTokens / (inputTokens + cacheReadTokens)` 命中率与同会话跨轮 `PREFIX_CACHE_DROP` 击穿告警，并在 `panel.js` 仅于启用/可观测时渲染摘要；**在线美元预算估算与自动模型降级路由有意延后**（离线账目保留在 `cost-report.mjs`）。
+  - **为什么做它**：在不引入失真在线定价假设的前提下，在任务执行中拦截 Token 爆炸与 KV-Cache 击穿。
 
 - [x] **Slice 2-Lite：标准 Trace/Span 血缘树 + 事后确定性 Policy Sensor**
   - **动作**：升级 `report.js` 输出 `gateway-otel-trace-v1` 因果血缘树（`task -> attempt -> llm -> tool -> approval / denial / sensor`）；在 `index.js` + `ledger.js` + `report.js` 落地只读 Git Baseline/Delta 测试与契约防篡改审计（隔离父仓 `.git` 并支持预存在脏工作区去噪）、物理命令/文件证据 vs 文本声明交叉核验，输出脱敏 `gateway-policy-sensor-v1`（`L1_AUTO_PASS` / `L2_AUTO_WARNING` / `L3_HUMAN_REQUIRED` 分级门禁），保持 `businessOutcome: 'unverified'` 与 21 文件发版边界不变（可选的 Docker 自动重跑验证继续延后不越权触发）。

@@ -1,4 +1,6 @@
 // Reporting only: no model calls, command parsing, retries or scheduling decisions.
+import { summarizeTokenUsage } from './ledger.js';
+
 const names = new Set(['read', 'glob', 'grep', 'edit', 'write', 'pwsh', 'subagent', 'list_subagent_models']);
 const errorCodes = new Set(['FS_SANDBOX_DENIED', 'FS_NOT_FOUND', 'FS_STALE_VERSION',
   'SEARCH_FAILED', 'SANDBOX_UNAVAILABLE', 'TOOL_ABORTED', 'TOOL_ABORTED_BEFORE_DISPATCH',
@@ -28,6 +30,66 @@ function safeUsage(value) {
 
 const safePurpose = value => value === null || value === undefined || value === ''
   ? null : safePurposes.has(value) ? value : 'custom';
+
+const round4 = value => Math.round(value * 10000) / 10000;
+
+export function buildPrefixCacheReport(calls) {
+  let eligibleCalls = 0;
+  let unreportedCalls = 0;
+  let cacheReadTokensSum = 0;
+  let uncachedInputTokensSum = 0;
+  let cacheWriteTokensSum = null;
+  const dropAlerts = [];
+  const prevByKey = new Map();
+
+  for (const call of calls ?? []) {
+    const u = safeUsage(call?.usage);
+    if (u && u.cacheWriteTokens !== undefined) {
+      cacheWriteTokensSum = (cacheWriteTokensSum ?? 0) + u.cacheWriteTokens;
+    }
+    if (u && u.inputTokens !== undefined && u.cacheReadTokens !== undefined) {
+      const promptTotal = u.inputTokens + u.cacheReadTokens;
+      if (promptTotal > 0) {
+        const hitRate = round4(u.cacheReadTokens / promptTotal);
+        eligibleCalls++;
+        cacheReadTokensSum += u.cacheReadTokens;
+        uncachedInputTokensSum += u.inputTokens;
+        const sourceKind = callSource(call).kind;
+        const key = JSON.stringify([call.sessionId ?? null, call.provider ?? null, call.model ?? null, sourceKind]);
+        const prev = prevByKey.get(key);
+        if (prev && prev.hitRate >= 0.5 && (prev.hitRate - hitRate) >= 0.3 && promptTotal >= 100) {
+          dropAlerts.push({
+            code: 'PREFIX_CACHE_DROP',
+            sessionId: call.sessionId,
+            callId: call.id,
+            previousCallId: prev.callId,
+            previousHitRate: prev.hitRate,
+            currentHitRate: hitRate,
+            dropDelta: round4(prev.hitRate - hitRate),
+          });
+        }
+        prevByKey.set(key, {callId: call.id, hitRate});
+      } else {
+        unreportedCalls++;
+      }
+    } else {
+      unreportedCalls++;
+    }
+  }
+
+  return {
+    schema: 'gateway-prefix-cache-v1',
+    basis: 'cacheReadTokens / (inputTokens + cacheReadTokens) over calls reporting both fields; missing cacheReadTokens stays unreported, never zero',
+    eligibleCalls,
+    unreportedCalls,
+    cacheReadTokensSum,
+    uncachedInputTokensSum,
+    cacheWriteTokensSum,
+    overallHitRate: eligibleCalls > 0 ? round4(cacheReadTokensSum / (cacheReadTokensSum + uncachedInputTokensSum)) : null,
+    dropAlertCount: dropAlerts.length,
+    dropAlerts,
+  };
+}
 
 function callSource(call) {
   const sessionRole = call.sessionRole ?? (call.parentSessionId ? 'child' : 'root');
@@ -707,6 +769,32 @@ export function taskReport(task, lifecycle) {
   const latestAttempt = attempts.at(-1);
   const limitDenied = task.denials.some(d => d.code === 'TASK_CALL_LIMIT' &&
     (!latestAttempt || d.attemptId === latestAttempt.id || (!d.attemptId && latestAttempt.kind === 'initial')));
+  const latestLimitDenial = task.denials.findLast(d =>
+    (d.code === 'TASK_CALL_LIMIT' || d.code === 'TASK_TOKEN_LIMIT') &&
+    (!latestAttempt || d.attemptId === latestAttempt.id || (!d.attemptId && latestAttempt.kind === 'initial')));
+  const tokenSummary = summarizeTokenUsage(task.calls ?? []);
+  const maxTotalTokens = Number.isSafeInteger(task.policy?.maxTotalTokens) ? task.policy.maxTotalTokens : null;
+  const warningRatio = typeof task.policy?.tokenWarningRatio === 'number' ? task.policy.tokenWarningRatio : 0.8;
+  const tokenLimitDenied = task.denials.some(d => d.code === 'TASK_TOKEN_LIMIT' &&
+    (!latestAttempt || d.attemptId === latestAttempt.id || (!d.attemptId && latestAttempt.kind === 'initial')));
+  const everTokenLimitDenied = task.denials.some(d => d.code === 'TASK_TOKEN_LIMIT');
+  const tokenBudget = {
+    enabled: maxTotalTokens !== null,
+    observedTotalTokens: tokenSummary.observedTotalTokens,
+    maxTotalTokens,
+    initialMaxTotalTokens: attempts[0]?.tokenBudgetAfter ?? maxTotalTokens,
+    addedTotalTokens: attempts.reduce((sum, a) => sum + (a.additionalTotalTokens ?? 0), 0),
+    remaining: maxTotalTokens === null ? null : Math.max(0, maxTotalTokens - tokenSummary.observedTotalTokens),
+    warningRatio: maxTotalTokens === null ? null : warningRatio,
+    warningTriggered: maxTotalTokens !== null && tokenSummary.observedTotalTokens >= Math.ceil(maxTotalTokens * warningRatio),
+    limitDenied: tokenLimitDenied,
+    everLimitDenied: everTokenLimitDenied,
+    measuredCalls: tokenSummary.measuredCalls,
+    missingUsageCalls: tokenSummary.missingUsageCalls,
+    coverage: tokenSummary.coverage,
+    basis: 'sum of observed provider-reported totalTokens (or component lower bound when totalTokens omitted); missing usage stays unknown, never zero-filled',
+  };
+  const prefixCache = buildPrefixCacheReport(task.calls ?? []);
   const usage = task.calls.map(call => ({status:call.usageStatus ?? (call.usage ? 'unknown' : 'missing'),
     value:safeUsage(call.usage)}));
   const tokenTotals = Object.fromEntries(tokenFields.map(field => {
@@ -732,7 +820,7 @@ export function taskReport(task, lifecycle) {
     lifecycle: lifecycleReport(task, lifecycle),
     stopReason: task.status === 'unknown' ? 'EXECUTION_UNCONFIRMED'
       : task.status === 'stopped' ? 'CANCELLED'
-      : task.status === 'limited' ? 'TASK_CALL_LIMIT'
+      : task.status === 'limited' ? (latestLimitDenial?.code === 'TASK_TOKEN_LIMIT' ? 'TASK_TOKEN_LIMIT' : 'TASK_CALL_LIMIT')
       : task.status === 'reconciled' ? 'STATE_RECONCILED'
       : task.status === 'completed' ? 'TURN_COMPLETED'
       : task.status === 'failed' ? 'EXECUTION_FAILED' : null,
@@ -744,12 +832,18 @@ export function taskReport(task, lifecycle) {
       addedCalls:attempts.reduce((total, attempt) => total + (attempt.additionalCalls ?? 0), 0),
       remaining: Math.max(0, task.policy.maxCalls - task.calls.length), limitDenied,
       everLimitDenied:task.denials.some(value => value.code === 'TASK_CALL_LIMIT')},
+    tokenBudget,
     attempts:attempts.map((attempt, index) => {
       const isLatestUnconfirmed = unconfirmed && index === attempts.length - 1;
       const attemptSensor = isLatestUnconfirmed ? latestSensor : safePolicySensor(attempt.policySensor);
       return {id:attempt.id, kind:attempt.kind, status:isLatestUnconfirmed ? 'unknown' : attempt.status,
         startedAt:attempt.startedAt, endedAt:attempt.endedAt, callStart:attempt.callStart, callEnd:attempt.callEnd,
         additionalCalls:attempt.additionalCalls, budgetBefore:attempt.budgetBefore, budgetAfter:attempt.budgetAfter,
+        ...(attempt.tokenBudgetAfter !== undefined ? {
+          additionalTotalTokens: attempt.additionalTotalTokens ?? 0,
+          tokenBudgetBefore: attempt.tokenBudgetBefore ?? null,
+          tokenBudgetAfter: attempt.tokenBudgetAfter,
+        } : {}),
         failureCode:attempt.failureCode, failureStage:attempt.failureStage,
         artifact:isLatestUnconfirmed ? null : attempt.artifact,
         ...(attempt.reconciliationEvidence ? {reconciliationEvidence:attempt.reconciliationEvidence} : {}),
@@ -779,7 +873,8 @@ export function taskReport(task, lifecycle) {
         partial:usage.filter(item => item.status === 'partial').length,
         missing:usage.filter(item => item.status === 'missing').length,
         unknown:usage.filter(item => item.status === 'unknown').length,
-        tokenTotals, semantics:usageSemantics}},
+        tokenTotals, semantics:usageSemantics},
+      prefixCache},
     approvalOperations: approvals.map(approvalRef),
     approvalCounts: {pending: approvals.filter(value => value.outcome === 'pending').length,
       allowedOnce: approvals.filter(value => value.outcome === 'allowed-once').length,
@@ -814,6 +909,7 @@ export function auditTask(task, lifecycle) {
         ...(attemptSensor ? {policySensor:attemptSensor} : {})};
     }),
     policySensor: latestSensor,
+    prefixCache: buildPrefixCacheReport(task.calls ?? []),
     trace: buildTraceTree(task, lifecycle),
     calls:task.calls.map(callAudit),
     denials:task.denials.map(denial => ({...(denial.attemptId ? {attemptId:denial.attemptId} : {}),

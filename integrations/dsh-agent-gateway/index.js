@@ -34,6 +34,9 @@ const selection = route.extend({reasoningEffort:z.string().min(1).max(100).optio
 
 const callLimit = z.number().int().min(1).max(100);
 const continuationIncrement = z.number().int().min(0).max(100);
+const tokenLimit = z.number().int().min(100).max(50_000_000);
+const tokenIncrement = z.number().int().min(0).max(50_000_000);
+const tokenWarningRatio = z.number().gt(0).lt(1);
 const continuationKind = z.enum(['continue','supplement','reconcile']);
 const schedulingSchema = z.object({root:selection, mode:z.enum(['single','delegate']),
   children:z.array(selection).max(32)}).strict();
@@ -64,17 +67,20 @@ export function resolveScheduling(value, catalog, base, maxCalls) {
 const policySchema = z.object({root: selection, allowedRoutes: z.array(selection).min(1),
 
   allowedChildRoutes: z.array(selection).optional(), toolSet: z.enum(['delegation','development']).default('delegation'),
-  delegationEnabled: z.boolean().optional(), agentPreset:z.string().optional(), scheduling:schedulingSchema.optional(), maxCalls: callLimit}).strict().refine(
+  delegationEnabled: z.boolean().optional(), agentPreset:z.string().optional(), scheduling:schedulingSchema.optional(), maxCalls: callLimit,
+  maxTotalTokens: tokenLimit.optional(), tokenWarningRatio: tokenWarningRatio.optional()}).strict().refine(
     value => value.delegationEnabled !== false || value.toolSet === 'development',
     'Disabling delegation requires development mode');
 
 const workspaceId = z.string().min(1).max(64).regex(/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/);
 
 const inputSchema = z.object({requestId: z.uuid(), goal: z.string().min(1).max(24000).refine(s => !!s.trim()),
-  workspaceId: workspaceId.optional(), maxCalls: callLimit.optional(), scheduling:schedulingSchema.optional()}).strict();
+  workspaceId: workspaceId.optional(), maxCalls: callLimit.optional(), maxTotalTokens: tokenLimit.optional(),
+  scheduling:schedulingSchema.optional()}).strict();
 const continuationSchema = z.object({continuationId: z.uuid(), kind: continuationKind,
   instruction: z.string().min(1).max(24000).refine(s => !!s.trim()),
-  additionalCalls: continuationIncrement.default(0)}).strict();
+  additionalCalls: continuationIncrement.default(0),
+  additionalTotalTokens: tokenIncrement.default(0)}).strict();
 
 const facts = {sessionId: z.string(), parentSessionId: z.string().nullable(), provider: z.string(), model: z.string(),
 
@@ -115,6 +121,7 @@ const policySensorSchema = z.object({
 }).strict();
 const attemptRecord = z.object({id:z.uuid(), kind:z.enum(['initial','continue','supplement','reconcile']),
   instruction:z.string(), additionalCalls:continuationIncrement, budgetBefore:callLimit, budgetAfter:callLimit,
+  additionalTotalTokens:tokenIncrement.optional(), tokenBudgetBefore:tokenLimit.nullable().optional(), tokenBudgetAfter:tokenLimit.nullable().optional(),
   callStart:z.number().int().min(0), callEnd:z.number().int().min(0).nullable(), status:attemptStatus,
   queuedAt:z.string().optional(), startedAt:z.string().nullable(), endedAt:z.string().nullable(), artifact:z.string().nullable(),
   failureCode:z.string().nullable(), failureStage:z.string().nullable(),
@@ -166,6 +173,8 @@ export async function apply(ctx, config, {streamBoundary, lifecycleBinding, allo
     maxConcurrentTasks: z.number().int().min(1).max(16).default(2),
     authorizedTaskMaxCalls: z.array(callLimit).min(1).max(16).optional(),
     authorizedContinuationCallIncrements: z.array(z.number().int().min(1).max(100)).max(16).optional(),
+    authorizedTaskMaxTotalTokens: z.array(tokenLimit).min(1).max(16).optional(),
+    authorizedContinuationTokenIncrements: z.array(z.number().int().min(1).max(50_000_000)).max(16).optional(),
     scheduling:schedulingConfigSchema.optional(), policy: policySchema}).strict().superRefine((value, issue) => {
       if (value.scheduling && value.policy.toolSet !== 'development')
         issue.addIssue({code:'custom',message:'Task scheduling requires development tools'});
@@ -180,10 +189,22 @@ export async function apply(ctx, config, {streamBoundary, lifecycleBinding, allo
       if (value.authorizedContinuationCallIncrements &&
           new Set(value.authorizedContinuationCallIncrements).size !== value.authorizedContinuationCallIncrements.length)
         issue.addIssue({code:'custom', message:'authorizedContinuationCallIncrements must be unique'});
+      if (value.authorizedTaskMaxTotalTokens && value.policy.maxTotalTokens !== undefined &&
+          !value.authorizedTaskMaxTotalTokens.includes(value.policy.maxTotalTokens))
+        issue.addIssue({code:'custom', message:'authorizedTaskMaxTotalTokens must include policy.maxTotalTokens'});
+      if (value.authorizedTaskMaxTotalTokens &&
+          new Set(value.authorizedTaskMaxTotalTokens).size !== value.authorizedTaskMaxTotalTokens.length)
+        issue.addIssue({code:'custom', message:'authorizedTaskMaxTotalTokens must be unique'});
+      if (value.authorizedContinuationTokenIncrements &&
+          new Set(value.authorizedContinuationTokenIncrements).size !== value.authorizedContinuationTokenIncrements.length)
+        issue.addIssue({code:'custom', message:'authorizedContinuationTokenIncrements must be unique'});
     }).parse(config);
   const {lifecycleDrainPath, cancellationTimeoutMs, maxConcurrentTasks, policy} = parsedConfig;
   const authorizedTaskMaxCalls = parsedConfig.authorizedTaskMaxCalls ?? [policy.maxCalls];
   const authorizedContinuationCallIncrements = parsedConfig.authorizedContinuationCallIncrements ?? [];
+  const authorizedTaskMaxTotalTokens = parsedConfig.authorizedTaskMaxTotalTokens ??
+    (policy.maxTotalTokens !== undefined ? [policy.maxTotalTokens] : []);
+  const authorizedContinuationTokenIncrements = parsedConfig.authorizedContinuationTokenIncrements ?? [];
   const workspaces = parsedConfig.workspaces ?? [{id:'default',
     label:parsedConfig.workspaceLabel ?? basename(parsedConfig.cwd), cwd:parsedConfig.cwd}];
   const workspaceById = new Map(workspaces.map(item => [item.id, item]));
@@ -331,6 +352,10 @@ export async function apply(ctx, config, {streamBoundary, lifecycleBinding, allo
     if (!agent) throw new LlmError('Request has no live owning Agent', 'TASK_NOT_AUTHORIZED');
     const owningTask = ledger.get(id);
     const activeAttempt = owningTask?.attempts?.findLast(value => ['running','cancel-requested'].includes(value.status));
+    if (Number.isSafeInteger(owningTask?.policy?.maxTotalTokens) &&
+        evidenceFailures.has(evidenceKey(id, activeAttempt?.id))) {
+      throw new LlmError('Task usage evidence failed to persist under an active token budget', 'EVIDENCE_STORAGE_FAILED');
+    }
     const reconcile = activeAttempt?.kind === 'reconcile';
     assertExecutionSafety(ctx, agent, owningTask?.policy, {reconcile});
     if ((options.tools ?? []).some(t => !modelVisibleToolsFor(owningTask?.policy?.toolSet,
@@ -367,8 +392,12 @@ export async function apply(ctx, config, {streamBoundary, lifecycleBinding, allo
       options.signal.throwIfAborted();
       const dispatch = () => {
         // An integrated input measurement may await. Preserve the last-moment
-        // cancellation check at the actual invocation, not just before it.
+        // cancellation and token-evidence checks at the actual invocation.
         if (stopIntents.has(id)) throw new LlmError('Task stopped before adapter invocation', 'TASK_NOT_RUNNING');
+        if (Number.isSafeInteger(owningTask?.policy?.maxTotalTokens) &&
+            evidenceFailures.has(evidenceKey(id, admission.attemptId))) {
+          throw new LlmError('Task usage evidence failed to persist under an active token budget', 'EVIDENCE_STORAGE_FAILED');
+        }
         options.signal.throwIfAborted();
         return next();
       };
@@ -1289,15 +1318,20 @@ export async function apply(ctx, config, {streamBoundary, lifecycleBinding, allo
     if (!workspaceById.has(input.workspaceId)) throw new PolicyError('WORKSPACE_NOT_AUTHORIZED');
     const prior = ledger.get(input.requestId);
     const priorInitialMaxCalls = prior?.attempts?.[0]?.budgetAfter ?? prior?.policy.maxCalls;
+    const priorInitialMaxTotalTokens = prior?.attempts?.[0]?.tokenBudgetAfter ?? prior?.policy.maxTotalTokens;
     if (input.maxCalls !== undefined && !authorizedTaskMaxCalls.includes(input.maxCalls) &&
         priorInitialMaxCalls !== input.maxCalls)
       throw new PolicyError('CALL_LIMIT_NOT_AUTHORIZED');
+    if (input.maxTotalTokens !== undefined && !authorizedTaskMaxTotalTokens.includes(input.maxTotalTokens) &&
+        priorInitialMaxTotalTokens !== input.maxTotalTokens)
+      throw new PolicyError('TOKEN_LIMIT_NOT_AUTHORIZED');
     await assertNotDraining();
     let taskPolicy = input.maxCalls === undefined ? policy : {...policy, maxCalls:input.maxCalls};
+    if (input.maxTotalTokens !== undefined) taskPolicy = {...taskPolicy, maxTotalTokens:input.maxTotalTokens};
     if (schedulingCatalog && !prior) {
       const selected = validatePreferences({scheduling:input.scheduling ?? defaultPreferences().scheduling,
         maxCalls:input.maxCalls ?? defaultPreferences().maxCalls});
-      taskPolicy = resolveScheduling(selected.scheduling,schedulingCatalog,policy,selected.maxCalls);
+      taskPolicy = resolveScheduling(selected.scheduling,schedulingCatalog,taskPolicy,selected.maxCalls);
     } else if (input.scheduling) {
       if (prior) {
         const normalize = item => JSON.stringify([selectionKey(item.root),item.mode,item.children.map(selectionKey).sort()]);
@@ -1317,12 +1351,14 @@ export async function apply(ctx, config, {streamBoundary, lifecycleBinding, allo
     const input = continuationSchema.parse(value);
     input.continuationId = input.continuationId.toLowerCase(); input.instruction = input.instruction.trim();
     if (lifecycleBinding && input.additionalCalls !== 0) throw new PolicyError('CONTINUATION_CALL_LIMIT_NOT_AUTHORIZED');
+    if (lifecycleBinding && (input.additionalTotalTokens ?? 0) !== 0)
+      throw new PolicyError('CONTINUATION_TOKEN_LIMIT_NOT_AUTHORIZED');
     await assertNotDraining();
     const continued = await ledger.beginContinuation(id, input, authorizedContinuationCallIncrements, task => {
       const previous = executionReceipts.get(`${id}/${task.attempts?.at(-1)?.id}`);
       if ((previous && previous.terminationConfirmed !== true) || (lifecycleBinding && !previous))
         throw new PolicyError('EXECUTION_TERMINATION_UNCONFIRMED');
-    });
+    }, authorizedContinuationTokenIncrements);
     let receipt = executionReceipts.get(`${id}/${continued.attempt.id}`)?.receipt;
     if (continued.created) {
       stopIntents.delete(id); observations.delete(id);
@@ -1366,6 +1402,8 @@ export async function apply(ctx, config, {streamBoundary, lifecycleBinding, allo
           const tasks = id ? [observedTask(id)].filter(Boolean) : ledger.list().map(task => observedTask(task.id));
           result = auditExport(tasks, new Map(tasks.map(task => [task.id, observations.get(task.id)?.lifecycle])));
         } else result = id ? visibleTask(id) : {policy, authorizedTaskMaxCalls, authorizedContinuationCallIncrements,
+          ...(authorizedTaskMaxTotalTokens.length ? {authorizedTaskMaxTotalTokens} : {}),
+          ...(authorizedContinuationTokenIncrements.length ? {authorizedContinuationTokenIncrements} : {}),
           scheduling:schedulingCatalog ? {roots:schedulingCatalog.roots,children:schedulingCatalog.children,
             defaults:defaultPreferences()} : null,
           workspaces:workspaces.map(({id, label}) => ({id, label})),

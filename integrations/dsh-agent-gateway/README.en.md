@@ -2,7 +2,7 @@
 
 [中文](README.md) | **English**
 
-[Download v0.2.0](https://github.com/CalvinL10/llm-gateway/releases/tag/v0.2.0)
+[Download v0.2.1](https://github.com/CalvinL10/llm-gateway/releases/tag/v0.2.1)
 
 Install the same package into separate compatible DSH Web Homes. Each instance uses its own host providers, credentials, authorized workspaces, and storage. No account copying, automatic task execution, or second DSH installation is required.
 
@@ -16,11 +16,11 @@ Supported scope: Windows, local loopback (`127.0.0.1`), and a compatible DSH Web
 
 The host must supply agentPresets discovery roots/serviceFor, sessions, sessionController, sessionProjections, workspaceRegistry, storageDomain, native tools/approvals, and Web authentication. Missing services must be resolved in the host, not by bypassing permissions.
 
-Download `llm-gateway-dsh-agent-gateway-0.2.0.tgz` from the release above, **not** GitHub's automatically generated Source code archive. Save it to the example directory below or adjust the path. A repository clone is unnecessary.
+Download `llm-gateway-dsh-agent-gateway-0.2.1.tgz` from the release above, **not** GitHub's automatically generated Source code archive. Save it to the example directory below or adjust the path. A repository clone is unnecessary.
 
 ```powershell
 $env:DSH_HOME = 'F:\my-dsh-home'  # Current terminal only; choose a different Home for another instance
-dsh plugin --profile web add F:\packages\llm-gateway-dsh-agent-gateway-0.2.0.tgz --config.auto-install-peers=false
+dsh plugin --profile web add F:\packages\llm-gateway-dsh-agent-gateway-0.2.1.tgz --config.auto-install-peers=false
 ```
 
 The bundle adds a **disabled** `gateway-agent-tasks` entry. Installation does not select accounts, authorize directories, or call a model. Dependencies come from the existing host; investigate missing peer dependencies rather than installing another runtime automatically.

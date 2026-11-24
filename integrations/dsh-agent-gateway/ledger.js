@@ -17,7 +17,8 @@ const now = () => new Date().toISOString();
 const attemptsOf = task => task.attempts ?? [];
 const currentAttempt = task => attemptsOf(task).findLast(attempt => active(attempt.status));
 const sameContinuation = (attempt, input) => attempt.kind === input.kind &&
-  attempt.instruction === input.instruction && attempt.additionalCalls === input.additionalCalls;
+  attempt.instruction === input.instruction && attempt.additionalCalls === input.additionalCalls &&
+  (attempt.additionalTotalTokens ?? 0) === (input.additionalTotalTokens ?? 0);
 const tokenFields = ['inputTokens', 'outputTokens', 'totalTokens', 'cacheReadTokens',
   'cacheWriteTokens', 'reasoningTokens'];
 const safePurposes = new Set(['compaction', 'session-title', 'planning', 'review']);
@@ -34,6 +35,65 @@ export function normalizeUsage(value) {
   return Object.keys(usage).length ? usage : null;
 }
 
+function callObservedTokens(usage) {
+  const u = normalizeUsage(usage);
+  if (!u) return 0;
+  if (u.totalTokens !== undefined) return u.totalTokens;
+  if (u.inputTokens !== undefined || u.outputTokens !== undefined ||
+    u.cacheReadTokens !== undefined || u.cacheWriteTokens !== undefined) {
+    return (u.inputTokens ?? 0) + (u.outputTokens ?? 0) +
+      (u.cacheReadTokens ?? 0) + (u.cacheWriteTokens ?? 0);
+  }
+  return 0;
+}
+
+function mergeMonotonicUsage(prior, next) {
+  const left = normalizeUsage(prior);
+  const right = normalizeUsage(next);
+  if (!left) return right;
+  if (!right) return left;
+  const merged = {...left, ...right};
+  // Never allow a later partial usage snapshot to shrink already-observed token consumption.
+  const leftObs = callObservedTokens(left);
+  const mergedObs = callObservedTokens(merged);
+  if (mergedObs < leftObs) {
+    if (left.totalTokens !== undefined) merged.totalTokens = left.totalTokens;
+    else return left;
+  }
+  return merged;
+}
+
+export function summarizeTokenUsage(calls) {
+  const list = calls ?? [];
+  let observedTotalTokens = 0;
+  let directTotalCalls = 0;
+  let componentFallbackCalls = 0;
+  let incompleteComponentCalls = 0;
+  let missingUsageCalls = 0;
+  for (const call of list) {
+    const u = normalizeUsage(call?.usage);
+    if (!u) {
+      missingUsageCalls++;
+      continue;
+    }
+    if (u.totalTokens !== undefined) {
+      observedTotalTokens += u.totalTokens;
+      directTotalCalls++;
+    } else if (u.inputTokens !== undefined || u.outputTokens !== undefined ||
+      u.cacheReadTokens !== undefined || u.cacheWriteTokens !== undefined) {
+      observedTotalTokens += callObservedTokens(u);
+      componentFallbackCalls++;
+      if (u.inputTokens === undefined || u.outputTokens === undefined) incompleteComponentCalls++;
+    } else {
+      missingUsageCalls++;
+    }
+  }
+  const measuredCalls = directTotalCalls + componentFallbackCalls;
+  const coverage = list.length === 0 ? 'no-calls'
+    : (missingUsageCalls > 0 || incompleteComponentCalls > 0) ? 'partial-usage-missing' : 'complete';
+  return {observedTotalTokens, directTotalCalls, componentFallbackCalls, missingUsageCalls, measuredCalls, coverage};
+}
+
 export function normalizePurpose(value) {
   if (value === null || value === undefined || value === '') return null;
   return safePurposes.has(value) ? value : 'custom';
@@ -41,10 +101,38 @@ export function normalizePurpose(value) {
 
 const sameUsage = (left, right) => tokenFields.every(key => left?.[key] === right?.[key]);
 
+export function isTransientWin32StorageLockError(error, platform = process.platform) {
+  if (platform !== 'win32') return false;
+  let current = error;
+  for (let depth = 0; depth < 6 && current && typeof current === 'object'; depth++) {
+    if (current.code === 'EBUSY' || (current.code === 'EPERM' && current.syscall !== 'open')) return true;
+    current = current.cause;
+  }
+  return false;
+}
+
+const waitMs = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+async function putDurable(table, id, task, {retries = 4, baseDelayMs = 15, platform = process.platform} = {}) {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await table.put(id, task);
+      return;
+    } catch (error) {
+      if (attempt >= retries || !isTransientWin32StorageLockError(error, platform)) throw error;
+      await waitMs(baseDelayMs * (2 ** attempt));
+    }
+  }
+}
+
 // One process owns this DSH storage domain. Serialize durable admissions, not model work.
 // This counts harness stream admissions, NOT provider HTTP attempts or dollars.
 export class TaskLedger {
-  constructor(table) { this.table = table; this.tail = Promise.resolve(); }
+  constructor(table, storageOptions = {}) {
+    this.table = table;
+    this.storageOptions = storageOptions;
+    this.tail = Promise.resolve();
+  }
   exclusive(fn) {
     const result = this.tail.then(fn);
     this.tail = result.catch(() => {});
@@ -58,7 +146,7 @@ export class TaskLedger {
       if (!task) throw new PolicyError('TASK_NOT_FOUND');
       const result = fn(task);
       try {
-        await this.table.put(id, task);
+        await putDurable(this.table, id, task, this.storageOptions);
       } catch (error) {
         throw new TaskStorageError(operation, task, error);
       }
@@ -80,29 +168,37 @@ export class TaskLedger {
       }
     });
   }
-  create({requestId, goal, workspaceId = 'default', maxCalls}, policy) {
+  create({requestId, goal, workspaceId = 'default', maxCalls, maxTotalTokens}, policy) {
     return this.exclusive(async () => {
       const prior = this.get(requestId);
       if (prior) {
         const initialMaxCalls = prior.attempts?.[0]?.budgetAfter ?? prior.policy.maxCalls;
+        const initialMaxTotalTokens = prior.attempts?.[0]?.tokenBudgetAfter ?? prior.policy.maxTotalTokens;
         if (prior.goal !== goal || (prior.workspaceId ?? 'default') !== workspaceId ||
-          (maxCalls !== undefined && initialMaxCalls !== maxCalls))
+          (maxCalls !== undefined && initialMaxCalls !== maxCalls) ||
+          (maxTotalTokens !== undefined && initialMaxTotalTokens !== maxTotalTokens))
           throw new PolicyError('REQUEST_ID_CONFLICT');
         return {task: prior, created: false};
       }
       const createdAt = now();
+      const hasTokenBudget = Number.isSafeInteger(policy.maxTotalTokens);
       const task = {id: requestId, sessionId: `gateway-agent-${requestId}`, goal, workspaceId,
         policy: structuredClone(policy), status: 'queued', createdAt, endedAt: null,
         calls: [], denials: [], artifact: null, toolOperations: [], approvalOperations: [],
         attempts: [{id: requestId, kind: 'initial', instruction: goal, additionalCalls: 0,
           budgetBefore: policy.maxCalls, budgetAfter: policy.maxCalls, callStart: 0, callEnd: null,
           status: 'queued', queuedAt: createdAt, startedAt: null, endedAt: null, artifact: null,
-          failureCode: null, failureStage: null}]};
-      await this.table.put(task.id, task);
+          failureCode: null, failureStage: null,
+          ...(hasTokenBudget ? {
+            additionalTotalTokens: 0,
+            tokenBudgetBefore: policy.maxTotalTokens,
+            tokenBudgetAfter: policy.maxTotalTokens,
+          } : {})}]};
+      await putDurable(this.table, task.id, task, this.storageOptions);
       return {task: structuredClone(task), created: true};
     });
   }
-  beginContinuation(id, input, authorizedIncrements = [], assertExecutionEnded) {
+  beginContinuation(id, input, authorizedIncrements = [], assertExecutionEnded, authorizedTokenIncrements = []) {
     return this.edit(id, 'begin-continuation', task => {
       task.attempts ??= [];
       const prior = task.attempts.find(attempt => attempt.id === input.continuationId);
@@ -123,12 +219,33 @@ export class TaskLedger {
       if (task.policy.maxCalls + input.additionalCalls > 100)
         throw new PolicyError('CALL_LIMIT_EXCEEDS_MAXIMUM');
 
+      const addTokens = input.additionalTotalTokens ?? 0;
+      const hasTokenBudget = Number.isSafeInteger(task.policy.maxTotalTokens);
+      if (addTokens > 0 && !hasTokenBudget)
+        throw new PolicyError('TOKEN_LIMIT_NOT_AUTHORIZED');
+      if (addTokens > 0 && !authorizedTokenIncrements.includes(addTokens))
+        throw new PolicyError('CONTINUATION_TOKEN_LIMIT_NOT_AUTHORIZED');
+      if (hasTokenBudget) {
+        const usageSummary = summarizeTokenUsage(task.calls);
+        if (usageSummary.observedTotalTokens >= task.policy.maxTotalTokens + addTokens)
+          throw new PolicyError('TASK_TOKEN_LIMIT');
+        if (task.policy.maxTotalTokens + addTokens > 50_000_000)
+          throw new PolicyError('TOKEN_LIMIT_EXCEEDS_MAXIMUM');
+      }
+
       const queuedAt = now(), budgetBefore = task.policy.maxCalls;
       task.policy.maxCalls += input.additionalCalls;
+      const tokenBudgetBefore = hasTokenBudget ? task.policy.maxTotalTokens : null;
+      if (hasTokenBudget) task.policy.maxTotalTokens += addTokens;
       const attempt = {id: input.continuationId, kind: input.kind, instruction: input.instruction,
         additionalCalls: input.additionalCalls, budgetBefore, budgetAfter: task.policy.maxCalls,
         callStart: task.calls.length, callEnd: null, status: 'queued', queuedAt, startedAt: null, endedAt: null,
-        artifact: null, failureCode: null, failureStage: null};
+        artifact: null, failureCode: null, failureStage: null,
+        ...(hasTokenBudget ? {
+          additionalTotalTokens: addTokens,
+          tokenBudgetBefore,
+          tokenBudgetAfter: task.policy.maxTotalTokens,
+        } : {})};
       task.attempts.push(attempt);
       task.status = 'queued'; task.endedAt = null; task.artifact = null;
       task.failureCode = null; task.failureStage = null;
@@ -164,7 +281,9 @@ export class TaskLedger {
         : task.policy.delegationEnabled === false && facts.sessionId !== task.sessionId ? 'DELEGATION_DISABLED'
         : !route || !childRoute ? 'ROUTE_NOT_AUTHORIZED'
         : [route, childRoute].some(r => r.reasoningEffort && r.reasoningEffort !== facts.reasoningEffort) ? 'REASONING_NOT_AUTHORIZED'
-        : task.calls.length >= task.policy.maxCalls ? 'TASK_CALL_LIMIT' : null;
+        : task.calls.length >= task.policy.maxCalls ? 'TASK_CALL_LIMIT'
+        : Number.isSafeInteger(task.policy.maxTotalTokens) &&
+            summarizeTokenUsage(task.calls).observedTotalTokens >= task.policy.maxTotalTokens ? 'TASK_TOKEN_LIMIT' : null;
       if (code) {
         task.denials.push({...facts, purpose:normalizePurpose(facts.purpose),
           ...(attempt ? {attemptId: attempt.id} : {}), code, at: now()});
@@ -213,10 +332,10 @@ export class TaskLedger {
       const call = task.calls.find(c => c.id === callId);
       if (!call) throw new PolicyError('CALL_NOT_FOUND');
       if (call.endedAt !== null) return;
-      const normalized = normalizeUsage(usage);
-      if (!normalized) return;
-      if (sameUsage(call.usage, normalized)) return;
-      call.usage = normalized;
+      const merged = mergeMonotonicUsage(call.usage, usage);
+      if (!merged) return;
+      if (sameUsage(call.usage, merged)) return;
+      call.usage = merged;
       call.usageStatus = 'partial';
       call.usageFirstObservedAt ??= at;
       call.usageObservedAt = at;
@@ -231,9 +350,9 @@ export class TaskLedger {
       // than once. The first durable terminal observation wins.
       if (call.endedAt !== null) return;
       call.firstResponseAt ??= observation.firstResponseAt ?? null;
-      const normalized = normalizeUsage(usage);
-      if (normalized && !sameUsage(call.usage, normalized)) {
-        call.usage = normalized;
+      const merged = mergeMonotonicUsage(call.usage, usage);
+      if (merged && !sameUsage(call.usage, merged)) {
+        call.usage = merged;
         const observedAt = observation.usageObservedAt ?? observation.firstResponseAt ?? now();
         call.usageFirstObservedAt ??= observedAt;
         call.usageObservedAt = observedAt;
@@ -292,7 +411,8 @@ export class TaskLedger {
   finish(id, status, artifact, failureCode = null, failureStage = null, policySensor = null) {
     return this.edit(id, 'finish', task => {
       const attempt = currentAttempt(task);
-      const limitDenied = task.denials.some(denial => denial.code === 'TASK_CALL_LIMIT' &&
+      const limitDenied = task.denials.some(denial =>
+        (denial.code === 'TASK_CALL_LIMIT' || denial.code === 'TASK_TOKEN_LIMIT') &&
         (!attempt || denial.attemptId === attempt.id || (!denial.attemptId && attempt.kind === 'initial')));
       let finalStatus = task.status === 'cancel-requested' && status !== 'unknown' ? 'stopped'
         : status !== 'unknown' && limitDenied ? 'limited' : status;

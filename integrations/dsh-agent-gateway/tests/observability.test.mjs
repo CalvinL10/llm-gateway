@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {randomUUID} from 'node:crypto';
-import {TaskLedger} from '../ledger.js';
+import {TaskLedger, isTransientWin32StorageLockError} from '../ledger.js';
 import {auditExport, publicTask, usageSemantics} from '../report.js';
 
 const rootRoute = {provider:'fixture-lead', model:'planner', reasoningEffort:'high'};
@@ -243,4 +243,118 @@ test('sample ledger reconciles admissions and adapter observations without inven
     assert.equal(call.httpAttempts.observability, 'unavailable');
     assert.equal(call.httpAttempts.count, null);
   }
+});
+
+test('transient Windows EBUSY and nested EPERM storage locks recover cleanly without losing durability', async () => {
+  const data = new Map();
+  let puts = 0;
+  const table = {
+    get: id => data.get(id),
+    entries: () => data.entries(),
+    async put(id, value) {
+      puts++;
+      if (puts === 1) {
+        const err = new Error('transient lock');
+        err.code = 'EBUSY';
+        throw err;
+      }
+      if (puts === 2) {
+        const rootErr = new Error('rename EPERM');
+        rootErr.code = 'EPERM';
+        throw new Error('storage write wrapped', {cause: rootErr});
+      }
+      data.set(id, structuredClone(value));
+    },
+  };
+  assert.equal(isTransientWin32StorageLockError(Object.assign(new Error('lock'), {code: 'EBUSY'}), 'linux'), false);
+  const ledger = new TaskLedger(table, {retries: 4, baseDelayMs: 1, platform: 'win32'});
+  const {task} = await ledger.create({requestId: randomUUID(), goal: 'win32 retry create'}, policy);
+  assert.equal(puts, 3);
+  await ledger.startAttempt(task.id, task.id);
+  assert.equal(ledger.get(task.id).status, 'running');
+});
+
+test('persistent Windows storage lock exhausting retries still fails closed with TaskStorageError', async () => {
+  const data = new Map();
+  let failPuts = false, attempts = 0;
+  const table = {
+    get: id => data.get(id),
+    entries: () => data.entries(),
+    async put(id, value) {
+      if (failPuts) {
+        attempts++;
+        const err = new Error('persistent lock');
+        err.code = 'EBUSY';
+        throw err;
+      }
+      data.set(id, structuredClone(value));
+    },
+  };
+  const ledger = new TaskLedger(table, {retries: 3, baseDelayMs: 1, platform: 'win32'});
+  const {task} = await ledger.create({requestId: randomUUID(), goal: 'win32 fail closed'}, policy);
+  await ledger.startAttempt(task.id, task.id);
+  failPuts = true;
+  await assert.rejects(
+    ledger.admit(task.id, facts(task)),
+    error => error.code === 'TASK_STORAGE_FAILED' && error.operation === 'admit' && error.cause?.code === 'EBUSY',
+  );
+  assert.equal(attempts, 4);
+  assert.equal(ledger.get(task.id).calls.length, 0);
+});
+
+test('non-lock storage errors fail immediately on the first attempt with zero retries', async () => {
+  const data = new Map();
+  let failPuts = false, attempts = 0;
+  const table = {
+    get: id => data.get(id),
+    entries: () => data.entries(),
+    async put(id, value) {
+      if (failPuts) {
+        attempts++;
+        const err = new Error('P03_TEST_STORAGE_FAILURE');
+        err.code = 'EIO';
+        throw err;
+      }
+      data.set(id, structuredClone(value));
+    },
+  };
+  const ledger = new TaskLedger(table, {retries: 4, baseDelayMs: 1, platform: 'win32'});
+  const {task} = await ledger.create({requestId: randomUUID(), goal: 'non lock error'}, policy);
+  await ledger.startAttempt(task.id, task.id);
+  failPuts = true;
+  await assert.rejects(
+    ledger.admit(task.id, facts(task)),
+    error => error.code === 'TASK_STORAGE_FAILED' && error.cause?.code === 'EIO',
+  );
+  assert.equal(attempts, 1);
+  assert.equal(ledger.get(task.id).calls.length, 0);
+});
+
+test('EACCES and open EPERM permission failures are not classified as transient locks and fail without retry', async () => {
+  assert.equal(isTransientWin32StorageLockError(Object.assign(new Error('acl'), {code: 'EACCES'}), 'win32'), false);
+  assert.equal(isTransientWin32StorageLockError(Object.assign(new Error('acl'), {code: 'EPERM', syscall: 'open'}), 'win32'), false);
+  assert.equal(isTransientWin32StorageLockError(Object.assign(new Error('lock'), {code: 'EPERM', syscall: 'rename'}), 'win32'), true);
+
+  const data = new Map();
+  let failPuts = false, attempts = 0;
+  const table = {
+    get: id => data.get(id),
+    entries: () => data.entries(),
+    async put(id, value) {
+      if (failPuts) {
+        attempts++;
+        throw Object.assign(new Error('permission denied'), {code: 'EACCES', syscall: 'open'});
+      }
+      data.set(id, structuredClone(value));
+    },
+  };
+  const ledger = new TaskLedger(table, {retries: 4, baseDelayMs: 1, platform: 'win32'});
+  const {task} = await ledger.create({requestId: randomUUID(), goal: 'permission denied'}, policy);
+  await ledger.startAttempt(task.id, task.id);
+  failPuts = true;
+  await assert.rejects(
+    ledger.admit(task.id, facts(task)),
+    error => error.code === 'TASK_STORAGE_FAILED' && error.cause?.code === 'EACCES',
+  );
+  assert.equal(attempts, 1);
 });

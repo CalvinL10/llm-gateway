@@ -22,6 +22,10 @@
     CONTINUATION_CALL_LIMIT_NOT_AUTHORIZED: '追加调用次数未由当前部署明确授权。',
     TASK_CALL_LIMIT: '任务已用完累计调用额度；继续需要选择明确授权的追加额度。',
     CALL_LIMIT_EXCEEDS_MAXIMUM: '追加后累计调用额度超过系统上限。',
+    TASK_TOKEN_LIMIT: '任务已用完累计 Token 额度；当前面板暂不直接调整 Token 上限，如需继续请通过受控配置或继续接口授权追加 Token 额度。',
+    TOKEN_LIMIT_NOT_AUTHORIZED: '所选 Token 限额未由当前部署明确授权。',
+    CONTINUATION_TOKEN_LIMIT_NOT_AUTHORIZED: '追加 Token 额度未由当前部署明确授权。',
+    TOKEN_LIMIT_EXCEEDS_MAXIMUM: '追加后累计 Token 额度超过系统上限。',
     GATEWAY_CLOSING: '服务正在关闭，暂不接收新任务。', INVALID_INPUT: '目标或请求参数无效。',
     INPUT_TOO_LARGE: '目标内容超过允许长度。', JSON_REQUIRED: '请求格式无效。',
     STORAGE_UNAVAILABLE: '浏览器无法保存请求身份；为避免重复任务，提交已停用。',
@@ -266,7 +270,16 @@
       const report = task.report ?? {};
       const budget = report.budget ?? {};
       $('boundary').textContent = `累计调用：${budget.used ?? task.calls?.length ?? 0}/${budget.maxCalls ?? task.policy?.maxCalls ?? '未知'}；模型回合：${report.stopReason ?? '尚未结束'}；工具事件：${report.evidenceCoverage ?? '不可用'}；测试验证：${report.validation ?? '未建立'}；用户业务验收：${report.businessOutcome ?? '未记录'}。`;
-      $('budget').textContent = `初始额度 ${budget.initialMaxCalls ?? '未知'}；显式追加 ${budget.addedCalls ?? 0}；累计上限 ${budget.maxCalls ?? task.policy?.maxCalls ?? '未知'}；已用 ${budget.used ?? task.calls?.length ?? 0}；剩余 ${budget.remaining ?? '未知'}；历史限额拒绝 ${budget.everLimitDenied ? '有' : '无'}。`;
+      let budgetText = `初始额度 ${budget.initialMaxCalls ?? '未知'}；显式追加 ${budget.addedCalls ?? 0}；累计上限 ${budget.maxCalls ?? task.policy?.maxCalls ?? '未知'}；已用 ${budget.used ?? task.calls?.length ?? 0}；剩余 ${budget.remaining ?? '未知'}；历史限额拒绝 ${budget.everLimitDenied ? '有' : '无'}。`;
+      const tb = report.tokenBudget;
+      if (tb?.enabled) {
+        budgetText += ` Token 预算：已观测 ${tb.observedTotalTokens}/${tb.maxTotalTokens}（剩余 ${tb.remaining}${tb.missingUsageCalls ? '，另有 ' + tb.missingUsageCalls + ' 次缺失用量未计入' : ''}${tb.warningTriggered ? '，已达告警阈值' : ''}）。`;
+      }
+      const pc = report.observations?.prefixCache;
+      if ((pc?.eligibleCalls ?? 0) > 0 && pc.overallHitRate !== null) {
+        budgetText += ` Prefix-Cache 命中率：${(pc.overallHitRate * 100).toFixed(1)}%（${pc.eligibleCalls} 次可观测${pc.dropAlertCount ? '，跨轮击穿告警 ' + pc.dropAlertCount + ' 次' : ''}）。`;
+      }
+      $('budget').textContent = budgetText;
       const workspace = latest.workspaces?.find(item => item.id === (task.workspaceId ?? latest.workspaces[0]?.id));
       $('workspace-scope').textContent = `授权工作区：${workspace?.label ?? '未知'}（${task.workspaceId ?? 'default'}）。审批只针对原生卡片中的当前动作；不会授权其他工作区或后续动作。`;
       const selected = task.policy?.scheduling;

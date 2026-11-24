@@ -15,6 +15,8 @@ const documents = [
   'docs/runbook.md',
   'docs/releases/v0.2.0.md',
   'docs/releases/v0.2.0.en.md',
+  'docs/releases/v0.2.1.md',
+  'docs/releases/v0.2.1.en.md',
   'integrations/dsh-agent-gateway/README.md',
   'integrations/dsh-agent-gateway/README.en.md',
   'legacy/python-cache-experiment/README.md',

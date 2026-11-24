@@ -2,9 +2,9 @@
 
 [中文](README.md) | **English**
 
-A bounded multi-agent task gateway control-plane plugin for compatible **DeepSeek Harness (`dsh`) Web** hosts. It reuses the host's models, accounts, authorized workspaces, native tools, and approvals to provide a protected task dialog, root/child model scheduling, shared tree-level call limits, cancellation, and explicit post-restart read-only reconciliation, while leaving ordinary DSH sessions unrestricted. On `main` (source beyond the tagged [v0.2.0 release](docs/releases/v0.2.0.en.md) `.tgz`), it also adds the `gateway-otel-trace-v1` causal trace tree, deterministic `gateway-policy-sensor-v1` (`L1/L2/L3`) post-task audit, and task dialog sensor status line (pack `./integrations/dsh-agent-gateway` from `main` via `npm pack` if you need a tarball with those additions).
+A bounded multi-agent task gateway control-plane plugin for compatible **DeepSeek Harness (`dsh`) Web** hosts. It reuses the host's models, accounts, authorized workspaces, native tools, and approvals to provide a protected task dialog, root/child model scheduling, shared tree-level call & token budgets (`maxCalls` / `maxTotalTokens`), read-only prefix-cache telemetry (`prefixCache`), cancellation, explicit post-restart read-only reconciliation, a `gateway-otel-trace-v1` causal trace tree, and a deterministic `gateway-policy-sensor-v1` (`L1/L2/L3`) post-task audit, while leaving ordinary DSH sessions unrestricted. The [v0.2.1 release](docs/releases/v0.2.1.en.md) matches `main`.
 
-**Plugin installation & usage**: see [Plugin Quickstart](integrations/dsh-agent-gateway/README.en.md) · [v0.2.0 Release Notes](docs/releases/v0.2.0.en.md).
+**Plugin installation & usage**: see [Plugin Quickstart](integrations/dsh-agent-gateway/README.en.md) · [v0.2.1 Release Notes](docs/releases/v0.2.1.en.md).
 **Architecture & roadmap**: see [System Architecture](docs/architecture.md) · [Option A Roadmap](PLAN.md) · [AI-Native Engineering Rules](AGENTS.md).
 
 ## Repository Layout
@@ -15,7 +15,7 @@ A bounded multi-agent task gateway control-plane plugin for compatible **DeepSee
 | `integrations/dsh-agent-gateway/ops/` | Local managed service lifecycle (`lifecycle.mjs`), offline maintenance (`maintenance.mjs`), and offline cost attribution (`cost-report.mjs`) |
 | `integrations/dsh-agent-gateway/smoke/` | Zero-credential HTTP/SSE smoke (`web-smoke.mjs`) and manual approval harness (`approval-manual.mjs`) |
 | `integrations/dsh-agent-gateway/tests/` | Core security/state-machine/portability/sensor regression suites and `tests/ops/` operational tests |
-| [docs/](docs/architecture.md) | [Architecture](docs/architecture.md), [Runbook](docs/runbook.md), [Local Use](docs/local-use.md), [History Snapshot](docs/history-snapshot.md), and [v0.2.0 Release Notes](docs/releases/v0.2.0.en.md) |
+| [docs/](docs/architecture.md) | [Architecture](docs/architecture.md), [Runbook](docs/runbook.md), [Local Use](docs/local-use.md), [History Snapshot](docs/history-snapshot.md), and [v0.2.1 Release Notes](docs/releases/v0.2.1.en.md) |
 | [legacy/python-cache-experiment/](legacy/python-cache-experiment/README.md) | Archived Python FastAPI + Redis Singleflight L1 cache prototype (isolated from the DSH control plane) |
 
 ## Quick Verification

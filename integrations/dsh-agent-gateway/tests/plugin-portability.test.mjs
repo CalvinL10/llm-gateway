@@ -14,7 +14,7 @@ const source = resolve(import.meta.dirname, '..');
 const scratch = resolve(source, '../../.local/plugin-portability-check');
 const runtime = resolve(source, 'runtime');
 const bin = resolve(runtime, 'node_modules/@deepseek-ai/dsh/lib/bin.js');
-const pack = resolve(scratch, 'llm-gateway-dsh-agent-gateway-0.2.0.tgz');
+const pack = resolve(scratch, 'llm-gateway-dsh-agent-gateway-0.2.1.tgz');
 const run = promisify(execFile);
 const endpoint = '/api/gateway-agent-tasks';
 const route = {provider:'fixture-lead', model:'planner'};
@@ -56,7 +56,7 @@ test('native package install, coexistence, independent Homes, task controls and 
   const npm = resolve(dirname(process.execPath), 'node_modules/npm/bin/npm-cli.js');
   const packed = JSON.parse((await run(process.execPath, [npm,'pack','--json','--ignore-scripts','--pack-destination',scratch],
     {cwd:source,env:envBase,windowsHide:true})).stdout)[0];
-  assert.equal(packed.filename, 'llm-gateway-dsh-agent-gateway-0.2.0.tgz');
+  assert.equal(packed.filename, 'llm-gateway-dsh-agent-gateway-0.2.1.tgz');
   assert.ok(packed.files.every(({path}) => !/(^|\/)(runtime|tests?|preset|\.local)(\/|$)|\.test\.|fixture|evidence/.test(path)));
   await writeFile(resolve(scratch,'package-files.json'), JSON.stringify(packed.files.map(f=>f.path),null,2));
   const fixtureDir = resolve(scratch,'fixture');

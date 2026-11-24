@@ -11,8 +11,8 @@ flowchart TD
     UI["宿主 Web UI + 注入面板 (panel.js)<br>/api/gateway-agent-tasks (127.0.0.1 · Auth · Origin/Host)"]
     PLUGIN["plugin.js<br>注册 package presets · 普通宿主会话直通共存"]
     IDX["index.js · 核心控制面<br>配置/策略校验 · 有界并发与物理工作区单写租约<br>拦截 ctx.on('llm/stream') & session/event<br>只读 Git Baseline/Delta 采集 (防父仓穿透)"]
-    LEDGER["ledger.js · TaskLedger<br>Persist-before-Admit · parentSession 树级归属<br>共享 maxCalls 熔断 · 重启收敛 unknown · 幂等续行"]
-    REPORT["report.js<br>脱敏投影 publicTask / auditExport<br>gateway-otel-trace-v1 血缘树 · Policy Sensor (L1/L2/L3)<br>缺失 usage 保留 unknown/missing · 不外泄原输入"]
+    LEDGER["ledger.js · TaskLedger<br>Persist-before-Admit · parentSession 树级归属<br>共享 maxCalls/maxTotalTokens 熔断 · Win32 瞬态锁退避<br>重启收敛 unknown · 幂等续行"]
+    REPORT["report.js<br>脱敏投影 publicTask / auditExport<br>gateway-otel-trace-v1 血缘树 · Policy Sensor (L1/L2/L3)<br>prefixCache 命中率/击穿告警 · 缺失 usage 保留 unknown/missing"]
     TOOLS["tools.js · 执行安全守卫<br>root/child 工具收窄 · Win32 路径/链接/敏感文件拒绝<br>reconcile 期间强制只读隔离"]
     DOCKER["docker-pwsh-executor.js + docker-executor-spec.mjs<br>显式配置方启用 · --network=none --read-only --cap-drop=ALL<br>失败报错，绝不回退宿主 shell"]
     DSH["DSH 宿主内核 (Session / Agent / Spawn / Provider 适配器)"]
@@ -35,10 +35,10 @@ flowchart TD
 | :--- | :--- | :--- |
 | [plugin.js](../integrations/dsh-agent-gateway/plugin.js) | 插件装配入口：校验宿主服务接口、挂载包内 `presets/`、映射 `executor: docker`、透传 `allowHostSessions: true` | 不替代宿主默认预设，不自动开启任务或选择账号 |
 | [index.js](../integrations/dsh-agent-gateway/index.js) | 控制面主循环：HTTP API、工作区单写租约队列、流拦截准入、`settleOwnedTree` 级联取消、`reconcile` 与只读 Git Baseline/Delta 采集 | 不自研 LLM 循环或模型协议，不绕过原生审批，绝不修改 Git 索引或穿透父仓 |
-| [ledger.js](../integrations/dsh-agent-gateway/ledger.js) | 持久化账本与策略状态机：原子串行修改、`taskOwner` 树级寻根、共享 `maxCalls` 配额、拒绝/工具/审批与 `policySensor` 原子落盘 | 不依赖单次 HTTP 重试计数，不退款失败调用 |
+| [ledger.js](../integrations/dsh-agent-gateway/ledger.js) | 持久化账本与策略状态机：原子串行修改（含 Win32 瞬态文件锁退避重试）、`taskOwner` 树级寻根、共享 `maxCalls` 与可选 `maxTotalTokens` 配额、拒绝/工具/审批与 `policySensor` 原子落盘 | 不依赖单次 HTTP 重试计数，不退款失败调用 |
 | [tools.js](../integrations/dsh-agent-gateway/tools.js) | 工具与路径边界：`developmentPathDenial`、Win32 歧义名/符号链接/硬链接/敏感文件拦截、`enterReconciliation` | 不充当内核级读取隔离，不放开宿主非隔离命令 |
 | [docker-pwsh-executor.js](../integrations/dsh-agent-gateway/docker-pwsh-executor.js) & [docker-executor-spec.mjs](../integrations/dsh-agent-gateway/docker-executor-spec.mjs) | 隔离命令执行器：仅显式配置 `executor: docker` 时挂载于网关专属 preset 隔离域内 | 无镜像或 daemon 时直接报错，永不降级宿主 `pwsh` |
-| [report.js](../integrations/dsh-agent-gateway/report.js) & [panel.js](../integrations/dsh-agent-gateway/panel.js) | 脱敏审计投影（`auditExport` / `publicTask`）、OTel 因果血缘树（`gateway-otel-trace-v1`）、确定性 Policy Sensor（`gateway-policy-sensor-v1` L1/L2/L3 门禁）与 Web 阴影 DOM 面板 | 不把 `goal`/原文/`artifact`/文件路径混入审计或传感器，不越权替代人类做业务验收 |
+| [report.js](../integrations/dsh-agent-gateway/report.js) & [panel.js](../integrations/dsh-agent-gateway/panel.js) | 脱敏审计投影（`auditExport` / `publicTask`）、OTel 因果血缘树（`gateway-otel-trace-v1`）、确定性 Policy Sensor（`gateway-policy-sensor-v1` L1/L2/L3）、`tokenBudget` 与 `prefixCache` 观测及 Web 阴影 DOM 面板 | 不把 `goal`/原文/`artifact`/文件路径混入审计或传感器，不越权替代人类做业务验收 |
 
 ---
 
