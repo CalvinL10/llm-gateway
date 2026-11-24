@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {mkdir, mkdtemp, rm, writeFile} from 'node:fs/promises';
+import {mkdir, mkdtemp, realpath, rm, writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {resolve} from 'node:path';
 import {runtimeArgument, inspectRuntime, createRuntimeScratch} from '../ops/runtime-paths.mjs';
@@ -53,7 +53,7 @@ test('runtime inspection reports the exact missing launcher and packages', async
 });
 
 test('runtime inspection accepts a complete manifest layout and reads versions', async t => {
-  const runtime = await mkdtemp(resolve(tmpdir(), 'gateway-runtime-complete-'));
+  const runtime = await realpath(await mkdtemp(resolve(tmpdir(), 'gateway-runtime-complete-')));
   t.after(() => rm(runtime, {recursive: true, force: true}));
   const packages = {
     '@deepseek-ai/cordis-plugin-group': '1.0.2',

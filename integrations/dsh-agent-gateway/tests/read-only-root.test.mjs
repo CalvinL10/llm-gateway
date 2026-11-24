@@ -1,12 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,writeFile,rm} from 'node:fs/promises';
+import {mkdtemp,realpath,writeFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {apply,assertExecutionSafety,toolsFor} from '../tools.js';
 
 test('native read-only development root can investigate without widening sandbox or approvals',async t=>{
- const cwd=await mkdtemp(join(tmpdir(),'gateway-readonly-'));t.after(()=>rm(cwd,{recursive:true,force:true}));
+ const cwd=await realpath(await mkdtemp(join(tmpdir(),'gateway-readonly-')));t.after(()=>rm(cwd,{recursive:true,force:true}));
  await writeFile(join(cwd,'source.txt'),'evidence');
  let guard;const permissions={sandbox:'read-only',approval:'ask'};
  const ctx={tools:{guard:fn=>guard=fn},on(){},shell:{dockerExecutor:true},

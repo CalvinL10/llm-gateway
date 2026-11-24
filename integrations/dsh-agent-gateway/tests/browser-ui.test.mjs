@@ -267,7 +267,7 @@ test('real browser completes daily task entry recovery, refresh, relogin, empty,
   await until(() => cdp.evaluate(`document.body.innerText.includes('browser-result.txt') &&
     document.body.innerText.includes('BROWSER_FILE_EVIDENCE_FINISHED')`));
   assert.equal(await cdp.evaluate(`(()=>{const button=[...document.querySelectorAll('button')]
-    .find(item=>item.textContent.includes('工具调用')); button?.click(); return !!button})()`), true);
+    .find(item=>/工具调用|tool calls?/i.test(item.textContent)); button?.click(); return !!button})()`), true);
   await until(() => cdp.evaluate(`document.body.innerText.includes('Pwsh')`));
   assert.match(await cdp.evaluate(`document.body.innerText`), /Gateway shell disabled|命令执行/);
   await cdp.evaluate(`${root}.getElementById('open').click()`); await until(() => cdp.evaluate(`${root}.getElementById('tasks').children.length===4`));
